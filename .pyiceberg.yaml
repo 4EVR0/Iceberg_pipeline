@@ -1,0 +1,6 @@
+catalogs:
+  default:
+    type: glue
+    s3.region: ap-northeast-2
+    warehouse: s3://oliveyoung-crawl-data/olive_young_silver/
+    py-catalog-impl: pyiceberg.catalog.glue.GlueCatalog
