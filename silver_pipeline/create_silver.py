@@ -136,9 +136,15 @@ def create_table_if_not_exists(catalog, table_name, schema, partition_spec, sort
     except Exception:
         pass
 
-    if not catalog.namespace_exists(db):
-        catalog.create_namespace(db)
-        print(f"   네임스페이스 생성: {db}")
+    namespaces = [ns[0] for ns in catalog.list_namespaces()]
+    if db not in namespaces:
+        try:
+            catalog.create_namespace(db)
+            print(f"   네임스페이스 생성: {db}")
+        except Exception as e:
+            # 이미 존재하는 경우 등의 예외 처리
+            print(f"   네임스페이스 생성 시도 중 참고: {e}")
+
 
     table = catalog.create_table(
         identifier     = table_name,
