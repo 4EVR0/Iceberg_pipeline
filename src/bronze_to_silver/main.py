@@ -18,6 +18,7 @@ from pyiceberg.catalog import load_catalog
 from config.settings import S3, Iceberg, DataPath, DuckDB
 from src.bronze_to_silver.ac_builder  import load_kcia_mapping_dict, load_synonym_dict, build_ahocorasick
 from src.bronze_to_silver.cleaner     import process_pipeline
+from silver_pipeline.write_silver import write_to_iceberg, write_csv_to_s3
 
 
 def load_category_master():
@@ -76,12 +77,11 @@ if __name__ == "__main__":
         print(f"[WARN] category_master 로드 실패 → category_id=None 으로 진행: {e}\n")
         category_df = None
 
-    # Step 5. KCIA 성분 사전 로드 (캐시 없으면 CSV에서 생성)
+    # Step 5. KCIA 성분 사전 로드
     print("5. KCIA 성분 사전 준비...")
     kcia_dict = load_kcia_mapping_dict(
         csv_path        = DataPath.KCIA_CSV,
-        json_cache_path = DataPath.KCIA_MAPPING_JSON,
-        rebuild         = False,
+        json_cache_path = DataPath.KCIA_MAPPING_JSON
     )
     print(f"   {len(kcia_dict)}개 키워드 로드됨\n")
 
@@ -99,8 +99,11 @@ if __name__ == "__main__":
     silver_df, error_df = process_pipeline(raw_df, ac_automaton, synonym_dict, category_df)
     print(f"   정상: {len(silver_df)}건 / 에러: {len(error_df)}건\n")
 
-    # Step 9. Iceberg write → silver_pipeline/write_silver.py 에서 담당
-    # TODO: silver_pipeline/write_silver.py 구현 후 연결
-    print("9. Iceberg write → silver_pipeline/write_silver.py 에서 담당")
-
+    # Step 9. Iceberg write + CSV 저장
+    print("9. Iceberg write...")
+    write_to_iceberg(silver_df, error_df)
+ 
+    print("\n10. CSV 저장 (s3 data_csv/)...")
+    write_csv_to_s3(silver_df, error_df)
+    
     print("\n=== 완료 ===")
