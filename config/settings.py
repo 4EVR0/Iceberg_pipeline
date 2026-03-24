@@ -7,6 +7,7 @@ Iceberg Pipeline 전역 설정 파일 (EC2 전용)
 
 import os
 import duckdb
+from pyiceberg.catalog import load_catalog
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Iceberg_pipeline/
 
@@ -22,9 +23,10 @@ class S3:
     BRONZE_PREFIX       = "oliveyoung"
     BRONZE_GLOB_PATTERN = f"s3://{BUCKET}/{BRONZE_PREFIX}/*/*/run_id=*/*.json"  # glob 탐색용
 
-    # Silver (출력)
+    # Silver
     SILVER_PATH       = f"s3://{BUCKET}/olive_young_silver/"
     SILVER_ERROR_PATH = f"s3://{BUCKET}/olive_young_silver_error/"
+    CATEGORY_MASTER_PATH = f"s3://{BUCKET}/olive_young_category_master/"
 
     # Gold
     GOLD_PATH = f"s3://{BUCKET}/olive_young_gold/"
@@ -44,6 +46,18 @@ class Iceberg:
     DATABASE           = "oliveyoung_db"
     SILVER_TABLE       = f"{DATABASE}.oliveyoung_silver"
     SILVER_ERROR_TABLE = f"{DATABASE}.oliveyoung_silver_error"
+    CATEGORY_MASTER_TABLE = f"{DATABASE}.oliveyoung_category_master"
+
+    @staticmethod
+    def get_catalog():
+        return load_catalog(
+            Iceberg.CATALOG_NAME,
+            **{
+                "type":      "glue",
+                "warehouse": S3.ICEBERG_METADATA_PATH,
+                "s3.region": S3.REGION,
+            }
+        )
 
 
 # ==========================================

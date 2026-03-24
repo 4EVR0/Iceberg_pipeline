@@ -17,7 +17,6 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from pyiceberg.catalog       import load_catalog
 from pyiceberg.schema        import Schema
 from pyiceberg.types         import (
     NestedField,
@@ -116,17 +115,6 @@ SILVER_SORT_ORDER = SortOrder(
 # 테이블 생성 함수
 # ==========================================
 
-def get_catalog():
-    return load_catalog(
-        Iceberg.CATALOG_NAME,
-        **{
-            "type":      "glue",
-            "warehouse": S3.ICEBERG_METADATA_PATH,
-            "s3.region": S3.REGION,
-        }
-    )
-
-
 def create_table_if_not_exists(catalog, table_name, schema, partition_spec, sort_order, location):
     db, _ = table_name.split(".", 1)
     try:
@@ -180,7 +168,7 @@ if __name__ == "__main__":
 
     print("=== Silver 테이블 생성 ===\n")
 
-    catalog = get_catalog()
+    catalog = Iceberg.get_catalog()
     fn = drop_and_recreate if args.recreate else create_table_if_not_exists
 
     print(f"1. {Iceberg.SILVER_TABLE}")
