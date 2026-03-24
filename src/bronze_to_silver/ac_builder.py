@@ -20,27 +20,34 @@ import ahocorasick
 def generate_kcia_mapping_dict(csv_path: str) -> dict:
     """
     KCIA 원본 CSV를 읽어 표준 매핑 딕셔너리를 생성합니다.
-
+ 
     매핑 규칙:
         - 표준명, 공백제거 표준명 → 표준명
         - 구이명(old_name_ko, 쉼표 구분) 및 공백제거 버전 → 표준명
         - 쉼표는 _C_ 로 마스킹 (Aho-Corasick 탐색 충돌 방지)
-
+ 
     Args:
         csv_path: kcia_ingredients_source.csv 경로
-
+ 
     Returns:
         dict: {검색키: 표준명칭}
-
+ 
     Raises:
         FileNotFoundError: CSV 파일이 존재하지 않을 때
     """
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"KCIA CSV 파일을 찾을 수 없습니다: {csv_path}")
-
+ 
     df = pd.read_csv(csv_path)
+ 
+    if 'std_name_ko' not in df.columns:
+        raise ValueError(
+            f"CSV에 필수 컬럼 'std_name_ko'가 없습니다. "
+            f"실제 컬럼: {list(df.columns)}"
+        )
+ 
     mapping = {}
-
+ 
     def _add(name: str, std_name: str):
         if not name or pd.isna(name):
             return
@@ -50,53 +57,76 @@ def generate_kcia_mapping_dict(csv_path: str) -> dict:
         masked = name.replace(",", "_C_")
         mapping[masked] = std_name
         mapping[masked.replace(" ", "")] = std_name
-
+ 
     for _, row in df.iterrows():
         if pd.isna(row.get('std_name_ko')):
             continue
         std_name = str(row['std_name_ko']).strip()
-
+ 
         # 표준명 등록
         _add(std_name, std_name)
 
-        # 구이명 등록 (쉼표로 여러 개 구분)
-        if 'old_name_ko' in row and pd.notna(row['old_name_ko']):
-            for oname in str(row['old_name_ko']).split(','):
-                _add(oname.strip(), std_name)
-
+        # 구이명 등록
+        old_name = str(row['old_name_ko']).strip()
+        _add(old_name, std_name)
+ 
     return mapping
-
-
+ 
+ 
 def load_kcia_mapping_dict(
     csv_path: str,
     json_cache_path: str,
-    rebuild: bool = False
 ) -> dict:
     """
-    캐시 JSON이 있으면 로드, 없거나 rebuild=True면 CSV에서 생성 후 캐시 저장.
-
+    CSV가 있으면 CSV에서 변환해서 사용하고,
+    CSV에 문제가 있으면 JSON 폴백으로 로드합니다.
+ 
+    우선순위:
+        1. CSV → generate_kcia_mapping_dict() 로 변환 (성공 시 JSON 캐시도 갱신)
+        2. CSV 실패 → JSON 폴백 (기존 캐시 사용)
+        3. 둘 다 없으면 RuntimeError
+ 
     Args:
         csv_path:        KCIA 원본 CSV 경로
-        json_cache_path: 캐시 JSON 저장/로드 경로
-        rebuild:         True이면 캐시 무시하고 CSV에서 재생성
-
+        json_cache_path: 폴백 및 캐시 저장 경로
+ 
     Returns:
         dict: KCIA 매핑 딕셔너리
+ 
+    Raises:
+        RuntimeError: CSV와 JSON 모두 사용 불가능한 경우
     """
-    if not rebuild and os.path.exists(json_cache_path):
-        print(f"   KCIA 사전 캐시 로드: {json_cache_path}")
+    # 1. CSV 시도
+    if os.path.exists(csv_path):
+        try:
+            print(f"   KCIA 사전 생성 중 (CSV: {csv_path}) ...")
+            mapping = generate_kcia_mapping_dict(csv_path)
+            # 성공 시 JSON 캐시 갱신
+            os.makedirs(os.path.dirname(json_cache_path), exist_ok=True)
+            with open(json_cache_path, 'w', encoding='utf-8') as f:
+                json.dump(mapping, f, ensure_ascii=False, indent=2)
+            print(f"   변환 완료: {len(mapping)}개 키워드 (캐시 갱신: {json_cache_path})")
+            return mapping
+        except Exception as e:
+            print(f"   [WARN] CSV 변환 실패 ({e}) → JSON 폴백 시도")
+    else:
+        print(f"   [WARN] CSV 없음 ({csv_path}) → JSON 폴백 시도")
+ 
+    # 2. JSON 폴백
+    if os.path.exists(json_cache_path):
+        print(f"   KCIA 사전 JSON 폴백 로드: {json_cache_path}")
         with open(json_cache_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-
-    print(f"   KCIA 사전 생성 중 (CSV: {csv_path}) ...")
-    mapping = generate_kcia_mapping_dict(csv_path)
-
-    os.makedirs(os.path.dirname(json_cache_path), exist_ok=True)
-    with open(json_cache_path, 'w', encoding='utf-8') as f:
-        json.dump(mapping, f, ensure_ascii=False, indent=2)
-    print(f"   캐시 저장 완료: {len(mapping)}개 키워드 → {json_cache_path}")
-
-    return mapping
+            mapping = json.load(f)
+        print(f"   로드 완료: {len(mapping)}개 키워드")
+        return mapping
+ 
+    # 3. 둘 다 없음
+    raise RuntimeError(
+        f"KCIA 사전을 로드할 수 없습니다.\n"
+        f"  CSV : {csv_path}\n"
+        f"  JSON: {json_cache_path}\n"
+        f"둘 중 하나가 반드시 존재해야 합니다."
+    )
 
 
 # ==========================================
