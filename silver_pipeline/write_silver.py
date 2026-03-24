@@ -26,7 +26,6 @@ def _get_catalog():
             "type":      "glue",
             "warehouse": S3.ICEBERG_METADATA_PATH,
             "s3.region": S3.REGION,
-            "region_name": S3.REGION,
         }
     )
 
