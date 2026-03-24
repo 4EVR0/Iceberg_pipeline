@@ -56,16 +56,20 @@ REGEX_BRACKET = re.compile(
 # 제품명 전처리
 REGEX_PRODUCT_BRACKET = re.compile(r'\[.*?\]|\(.*?\)')
 REGEX_PRODUCT_VOLUME_ANCHOR = re.compile(
-    r'\d+\s*(?:ml|㎖|l|ℓ|g|매|호|ea|개입|p|종)(?:\s*[xX*]\s*\d+)?(?![a-zA-Z0-9]).*',
+    r'('
+    r'\d+(?:\.\d+)?\s*[+xX*]\s*\d+.*|'  # 3+1, 50+30ml, 1+1기획 등 (수량/용량 결합)
+    r'\d+(?:\.\d+)?\s*(?:ml|㎖|l|ℓ|g|매|호|ea|개입|입|p|종).*|' # 150ml, 2입 등 (수량/용량 단위)
+    r'\b\d+(?:\.\d+)?$' # 문장 끝에 혼자 남은 숫자 (마스크 3 등)
+    r').*',
     re.IGNORECASE
 )
 REGEX_PRODUCT_MARKETING = re.compile(
-    r'기획|증정|단독|1\+1|본품|추가|2입|대용량|세트|듀오|트리플|한정|리필팩|리필|단품|구성'
+    r'기획|증정|단독|1\+1|본품|추가|대용량|세트|듀오|트리플|한정|리필팩|리필|단품|구성'
     r'|트래블\s*키트|캡슐\s*키트'
     r'|더블\s*(기획|세트|구성|\d+입|\d+\s*(ml|g|㎖))',
     re.IGNORECASE
 )
-REGEX_PRODUCT_TAIL_SYMBOLS = re.compile(r'[\s+*/\-,]+$|(?<=\s)[*/\,]+(?=\s|$)')
+REGEX_PRODUCT_TAIL_SYMBOLS = re.compile(r'[\s+*/\-.,]+$|(?<=\s)[+*/\-,.]+(?=\s|$)')
 REGEX_MULTI_SPACE = re.compile(r'\s+')
 
 # 성분명 내 쉼표 마스킹 (영숫자 사이의 쉼표)
@@ -166,7 +170,7 @@ def process_pipeline(
     Returns:
         (silver_df, error_df)
     """
-    from src.ac_builder import search_with_ac
+    from src.bronze_to_silver.ac_builder import search_with_ac
 
     # [Step 1] category lookup 딕셔너리 빌드
     category_lookup = build_category_lookup(category_df) if category_df is not None else {}
@@ -180,9 +184,14 @@ def process_pipeline(
         product_name_raw = str(row.get('name', 'Unknown'))
         brand            = str(row.get('brand', 'Unknown'))
         url              = str(row.get('url', ''))
-        crawled_at       = str(row.get('crawled_at', ''))
         main_category    = str(row.get('main_category', ''))
         sub_category     = str(row.get('sub_category', ''))
+
+        crawled_at_raw   = str(row.get('crawled_at', ''))
+        try:
+            crawled_at = pd.Timestamp(crawled_at_raw)
+        except Exception:
+            crawled_at = pd.NaT
 
         try:
             rating = float(row.get('rating', 0.0))
