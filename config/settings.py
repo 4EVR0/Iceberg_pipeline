@@ -32,15 +32,18 @@ class S3:
     # Iceberg 메타데이터
     ICEBERG_METADATA_PATH = f"s3://{BUCKET}/olive_young_iceberg_metadata/"
 
+    # 처리 결과 CSV 저장 (조회용)
+    DATA_CSV_PATH = f"s3://{BUCKET}/data_csv/"
+
 
 # ==========================================
 # Glue Catalog / Iceberg 설정
 # ==========================================
 class Iceberg:
     CATALOG_NAME       = "glue"
-    DATABASE           = "oliveyoung"
-    SILVER_TABLE       = f"{DATABASE}.olive_young_silver"
-    SILVER_ERROR_TABLE = f"{DATABASE}.olive_young_silver_error"
+    DATABASE           = "oliveyoung_db"
+    SILVER_TABLE       = f"{DATABASE}.oliveyoung_silver"
+    SILVER_ERROR_TABLE = f"{DATABASE}.oliveyoung_silver_error"
 
 
 # ==========================================
