@@ -187,9 +187,8 @@ def process_pipeline(
         main_category    = str(row.get('main_category', ''))
         sub_category     = str(row.get('sub_category', ''))
 
-        crawled_at_raw   = str(row.get('crawled_at', ''))
         try:
-            crawled_at = pd.Timestamp(crawled_at_raw)
+            crawled_at = pd.Timestamp(crawled_at_raw, tz="UTC")
         except Exception:
             crawled_at = pd.NaT
 

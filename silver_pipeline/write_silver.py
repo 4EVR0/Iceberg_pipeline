@@ -52,7 +52,7 @@ _SILVER_PA_SCHEMA = pa.schema([
     pa.field("review_count",            pa.int32(),     nullable=True),
     pa.field("review_stats",            _REVIEW_STATS_PA_TYPE, nullable=True),
     pa.field("product_url",             pa.string(),    nullable=True),
-    pa.field("crawled_at",              pa.timestamp("us"), nullable=True),
+    pa.field("crawled_at",              pa.timestamp("us", tz="UTC"), nullable=True),
 ])
 
 
@@ -64,7 +64,7 @@ _SILVER_ERROR_PA_SCHEMA = pa.schema([
     pa.field("product_name_raw",        pa.string(),        nullable=True),
     pa.field("product_ingredients_raw", pa.string(),        nullable=True),
     pa.field("product_url",             pa.string(),        nullable=True),
-    pa.field("crawled_at",              pa.timestamp("us"), nullable=True),
+    pa.field("crawled_at",              pa.timestamp("us", tz="UTC"), nullable=True),
     pa.field("error_type",              pa.string(),        nullable=True),
     pa.field("residual_text",           pa.string(),        nullable=True),
 ])
@@ -101,8 +101,8 @@ def _to_arrow_silver(df: pd.DataFrame) -> pa.Table:
             "review_stats":            review_stats_col,
             "product_url":             pa.array(df["product_url"],             type=pa.string()),
             "crawled_at":              pa.array(
-                pd.to_datetime(df["crawled_at"]),
-                type=pa.timestamp("us"),
+                pd.to_datetime(df["crawled_at"], utc=True),
+                type=pa.timestamp("us", tz="UTC"),
             ),
         },
     )
@@ -123,8 +123,8 @@ def _to_arrow_error(df: pd.DataFrame) -> pa.Table:
             "product_ingredients_raw": pa.array(df["product_ingredients_raw"], type=pa.string()),
             "product_url":             pa.array(df["product_url"],             type=pa.string()),
             "crawled_at":              pa.array(
-                pd.to_datetime(df["crawled_at"]),
-                type=pa.timestamp("us"),
+                pd.to_datetime(df["crawled_at"], utc=True),
+                type=pa.timestamp("us", tz="UTC"),
             ),
             "error_type":              pa.array(df["error_type"],              type=pa.string()),
             "residual_text":           pa.array(df["residual_text"],           type=pa.string()),
