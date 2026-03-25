@@ -21,7 +21,7 @@ class S3:
 
     # Bronze: s3://.../oliveyoung/main_category/sub_category/run_id=YYYYMMDD_HHMMSS/part_*.json
     BRONZE_PREFIX       = "oliveyoung"
-    BRONZE_GLOB_PATTERN = f"s3://{BUCKET}/{BRONZE_PREFIX}/*/*/run_id=*/*.json"  # glob 탐색용
+    BRONZE_GLOB_PATTERN = f"s3://{BUCKET}/{BRONZE_PREFIX}/클렌징/*/run_id=*/*.json"  # glob 탐색용
 
     # Silver
     SILVER_PATH       = f"s3://{BUCKET}/olive_young_silver/"
@@ -29,8 +29,9 @@ class S3:
     CATEGORY_MASTER_PATH = f"s3://{BUCKET}/olive_young_category_master/"
 
     # Gold
-    GOLD_PATH = f"s3://{BUCKET}/olive_young_gold/"
-
+    GOLD_PREFIX = "olive_young_gold"
+    INGREDIENT_FREQUENCY_PATH = f"s3://{BUCKET}/{GOLD_PREFIX}/gold_ingredient_frequency/"
+    
     # Iceberg 메타데이터
     ICEBERG_METADATA_PATH = f"s3://{BUCKET}/olive_young_iceberg_metadata/"
 
@@ -47,6 +48,8 @@ class Iceberg:
     SILVER_TABLE       = f"{DATABASE}.oliveyoung_silver"
     SILVER_ERROR_TABLE = f"{DATABASE}.oliveyoung_silver_error"
     CATEGORY_MASTER_TABLE = f"{DATABASE}.oliveyoung_category_master"
+    GOLD_INGREDIENT_FREQUENCY_TABLE = f"{DATABASE}.gold_ingredient_frequency"
+    GOLD_INGREDIENT_FREQUENCY_TOP_N = 50
 
     @staticmethod
     def get_catalog():
