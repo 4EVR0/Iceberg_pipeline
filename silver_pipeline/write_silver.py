@@ -62,6 +62,7 @@ _SILVER_ERROR_PA_SCHEMA = pa.schema([
     pa.field("product_id",              pa.string(),        nullable=False),
     pa.field("product_brand",           pa.string(),        nullable=True),
     pa.field("product_name_raw",        pa.string(),        nullable=True),
+    pa.field("product_name",            pa.string(),        nullable=True),
     pa.field("product_ingredients_raw", pa.string(),        nullable=True),
     pa.field("product_url",             pa.string(),        nullable=True),
     pa.field("crawled_at",              pa.timestamp("us", tz="UTC"), nullable=True),
@@ -120,6 +121,7 @@ def _to_arrow_error(df: pd.DataFrame) -> pa.Table:
             "product_id":              pa.array(df["product_id"],              type=pa.string()),
             "product_brand":           pa.array(df["product_brand"],           type=pa.string()),
             "product_name_raw":        pa.array(df["product_name_raw"],        type=pa.string()),
+            "product_name":            pa.array(df["product_name"],            type=pa.string()),
             "product_ingredients_raw": pa.array(df["product_ingredients_raw"], type=pa.string()),
             "product_url":             pa.array(df["product_url"],             type=pa.string()),
             "crawled_at":              pa.array(

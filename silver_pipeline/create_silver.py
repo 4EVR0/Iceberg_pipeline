@@ -74,6 +74,7 @@ SILVER_ERROR_SCHEMA = Schema(
     NestedField(2, "product_id",              StringType(),    required=True),
     NestedField(3, "product_brand",           StringType(),    required=False),
     NestedField(4, "product_name_raw",        StringType(),    required=False),
+    NestedField(4, "product_name",            StringType(),    required=False),
     NestedField(5, "product_ingredients_raw", StringType(),    required=False),
     NestedField(6, "product_url",             StringType(),    required=False),
     NestedField(7, "crawled_at",              TimestamptzType(), required=False),
