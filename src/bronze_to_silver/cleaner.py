@@ -64,7 +64,7 @@ REGEX_PRODUCT_VOLUME_ANCHOR = re.compile(
     re.IGNORECASE
 )
 REGEX_PRODUCT_MARKETING = re.compile(
-    r'기획|증정|단독|1\+1|본품|추가|대용량|세트|듀오|트리플|한정|리필팩|리필|단품|구성'
+    r'기획|증정|단독|1\+1|본품|추가|대용량|세트|싱글|듀오|트리플|한정|리필팩|리필|단품|구성'
     r'|트래블\s*키트|캡슐\s*키트'
     r'|더블\s*(기획|세트|구성|\d+입|\d+\s*(ml|g|㎖))',
     re.IGNORECASE
