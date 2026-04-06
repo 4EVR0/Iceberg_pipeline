@@ -16,7 +16,12 @@ if _PROJECT_ROOT not in sys.path:
 from pyiceberg.catalog import load_catalog
 
 from config.settings import S3, Iceberg, DataPath, DuckDB
-from src.bronze_to_silver.ac_builder  import load_kcia_mapping_dict, load_synonym_dict, build_ahocorasick
+from src.bronze_to_silver.ac_builder import (
+    load_kcia_mapping_dict,
+    load_typo_maps,
+    load_garbage_config,
+    build_ahocorasick,
+)
 from src.bronze_to_silver.cleaner     import process_pipeline
 from silver_pipeline.write_silver import write_to_iceberg, write_csv_to_s3
 
@@ -73,7 +78,6 @@ if __name__ == "__main__":
         category_df = load_category_master()
         print(f"   {len(category_df)}개 카테고리 로드됨\n")
     except Exception as e:
-        # category_master 로드 실패 시 category_id=None으로 계속 진행
         print(f"[WARN] category_master 로드 실패 → category_id=None 으로 진행: {e}\n")
         category_df = None
 
@@ -81,29 +85,43 @@ if __name__ == "__main__":
     print("5. KCIA 성분 사전 준비...")
     kcia_dict = load_kcia_mapping_dict(
         csv_path        = DataPath.KCIA_CSV,
-        json_cache_path = DataPath.KCIA_MAPPING_JSON
+        json_cache_path = DataPath.KCIA_MAPPING_JSON,
     )
     print(f"   {len(kcia_dict)}개 키워드 로드됨\n")
 
-    # Step 6. 유의어/오타 사전 로드
-    print("6. 유의어 사전 로드...")
-    synonym_dict = load_synonym_dict(DataPath.TYPO_MAP_JSON)
+    # Step 6. 유의어/오타 사전 로드 (typo_map + typo_map_regex)
+    print("6. 유의어/오타 사전 로드...")
+    typo_list, typo_regex_list = load_typo_maps(
+        typo_map_path       = DataPath.TYPO_MAP_JSON,
+        typo_map_regex_path = DataPath.TYPO_MAP_REGEX_JSON,
+    )
 
-    # Step 7. Aho-Corasick 빌드
-    print("\n7. Aho-Corasick 빌드...")
+    # Step 7. garbage 키워드 설정 로드
+    print("\n7. garbage 키워드 설정 로드...")
+    garbage_config = load_garbage_config(DataPath.GARBAGE_KEYWORDS_JSON)
+
+    # Step 8. Aho-Corasick 빌드
+    print("\n8. Aho-Corasick 빌드...")
     ac_automaton = build_ahocorasick(kcia_dict)
     print("   빌드 완료\n")
 
-    # Step 8. 전처리 파이프라인 실행
-    print("8. 전처리 파이프라인 실행...")
-    silver_df, error_df = process_pipeline(raw_df, ac_automaton, synonym_dict, category_df)
+    # Step 9. 전처리 파이프라인 실행
+    print("9. 전처리 파이프라인 실행...")
+    silver_df, error_df = process_pipeline(
+        df              = raw_df,
+        ac_automaton    = ac_automaton,
+        typo_list       = typo_list,
+        typo_regex_list = typo_regex_list,
+        category_df     = category_df,
+        garbage_config  = garbage_config,
+    )
     print(f"   정상: {len(silver_df)}건 / 에러: {len(error_df)}건\n")
 
-    # Step 9. Iceberg write + CSV 저장
-    print("9. Iceberg write...")
+    # Step 10. Iceberg write + CSV 저장
+    print("10. Iceberg write...")
     write_to_iceberg(silver_df, error_df)
- 
-    print("\n10. CSV 저장 (s3 data_csv/)...")
+
+    print("\n11. CSV 저장 (s3 data_csv/)...")
     write_csv_to_s3(silver_df, error_df)
-    
+
     print("\n=== 완료 ===")

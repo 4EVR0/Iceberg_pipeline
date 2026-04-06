@@ -3,7 +3,7 @@ KCIA 성분 사전 빌드 및 Aho-Corasick 오토마타 모듈
 
 담당:
     - KCIA CSV → 매핑 딕셔너리 생성
-    - 유의어/오타 JSON 로드
+    - 유의어/오타 사전 JSON 로드 (typo_map, typo_map_regex)
     - Aho-Corasick 오토마타 빌드 및 탐색
 """
 
@@ -133,24 +133,61 @@ def load_kcia_mapping_dict(
 # 2. 유의어/오타 사전 로드
 # ==========================================
 
-def load_synonym_dict(json_path: str) -> dict:
+def load_typo_maps(
+    typo_map_path: str,
+    typo_map_regex_path: str,
+) -> tuple[list[dict], list[dict]]:
     """
-    유의어/오타 매핑 JSON을 로드합니다.
+    typo_map.json과 typo_map_regex.json을 로드합니다.
+    파일이 없으면 빈 리스트를 반환합니다.
+
+    두 파일 모두 raw 길이 내림차순으로 정렬되어 저장되어 있어야 합니다.
+    (긴 raw부터 치환해야 부분집합 오염을 방지할 수 있습니다.)
+
+    Args:
+        typo_map_path:       typo_map.json 경로 (list[{"raw", "fix"}])
+        typo_map_regex_path: typo_map_regex.json 경로 (list[{"raw", "fix", "pattern"}])
+
+    Returns:
+        (typo_list, typo_regex_list)
+            typo_list:       단순 치환용 리스트
+            typo_regex_list: 정규식 치환용 리스트 (pattern 필드 포함)
+    """
+    def _load(path: str, label: str) -> list[dict]:
+        if not os.path.exists(path):
+            print(f"   {label} 없음 (건너뜀): {path}")
+            return []
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        print(f"   {label} 로드: {len(data)}개 항목")
+        return data
+
+    typo_list       = _load(typo_map_path,       "typo_map")
+    typo_regex_list = _load(typo_map_regex_path, "typo_map_regex")
+    return typo_list, typo_regex_list
+
+
+def load_garbage_config(json_path: str) -> dict:
+    """
+    garbage_keywords.json을 로드합니다.
     파일이 없으면 빈 딕셔너리를 반환합니다.
 
     Args:
-        json_path: synonym_mapping.json (또는 typo_map.json) 경로
+        json_path: garbage_keywords.json 경로
 
     Returns:
-        dict: {오타/유의어: 표준표현}
+        dict: {"exact": [...], "contains": [...], "regex": [...]}
     """
     if not os.path.exists(json_path):
-        print(f"   유의어 사전 없음 (건너뜀): {json_path}")
+        print(f"   garbage_keywords 없음 (건너뜀): {json_path}")
         return {}
     with open(json_path, 'r', encoding='utf-8') as f:
-        synonym_dict = json.load(f)
-    print(f"   유의어 사전 로드: {len(synonym_dict)}개 항목")
-    return synonym_dict
+        config = json.load(f)
+    exact_n    = len(config.get("exact", []))
+    contains_n = len(config.get("contains", []))
+    regex_n    = len(config.get("regex", []))
+    print(f"   garbage_keywords 로드: exact={exact_n}, contains={contains_n}, regex={regex_n}")
+    return config
 
 
 # ==========================================
