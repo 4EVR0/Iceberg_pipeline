@@ -11,6 +11,7 @@
 
 import re
 import uuid
+import json
 import pandas as pd
 import ahocorasick
 
@@ -30,6 +31,13 @@ REGEX_ILN = re.compile(r'(?i)[<\[]?ILN\d+[>\]]?')
 REGEX_LEGEND_WITH_BRACKET = re.compile(r'\([^)]*[*※+][^)]*\)')
 REGEX_SYMBOLS = re.compile(r'[*※+]')
 
+# 무첨가성분 안내 문구 제거 (말미의 "무첨가 성분: ..." 전체 삭제)
+# 예) "토코페롤, 소듐파이테이트 * 무첨가 성분: 페녹시에탄올, PEG ..."
+REGEX_NO_INGREDIENT = re.compile(
+    r'[*※]?\s*무첨가\s*성분\s*:.*$',
+    re.IGNORECASE | re.DOTALL
+)
+
 # 이종 결합 번들 탐지
 REGEX_BUNDLE = re.compile(
     r'(?:<[^>]+>|'
@@ -37,6 +45,7 @@ REGEX_BUNDLE = re.compile(
     r'[가-힣a-zA-Z0-9]+\s*-\s*\[전성분|'
     r'\[(?![Ii][Ll][Nn])[^\]]+\]|'
     r'(?:^|\s)\d{1,2}\)\s*[가-힣a-zA-Z]+)'
+    r'[가-힣a-zA-Z0-9]+\s*\)\s*[가-힣a-zA-Z]+'
 )
 REGEX_PRODUCT_OPTION_BUNDLE = re.compile(
     r'\d+\s*[종가지]\s*(?:(?:택|중|중\s*\d+)\s*(?:1|일|택|선택))?'
@@ -46,10 +55,10 @@ REGEX_PRODUCT_OPTION_BUNDLE = re.compile(
 # 성분명 농도/이명 괄호 제거
 REGEX_BRACKET = re.compile(
     r'\([^)]*('
-    r'ppm|ppb|%|mg|mG|G|g|ml|mL|'
+    r'ppm|PPM|ppb|PPB|%|mg|mG|G|g|ml|mL|IU|'
     r'NON\s*GMO|CI\s*\d+|BHA|AHA|'
-    r'산\s*|성분|온천수|유래|추출물'
-    r'|[\d.]+\s*'
+    r'산\s*|전성분|전성분명|성분|유래|추출물|아쿠아'
+    r'|[\d.]+\s*(?:%|ppm|ppb|mg|ml|g)?$'
     r').*?\)'
 )
 
@@ -57,14 +66,14 @@ REGEX_BRACKET = re.compile(
 REGEX_PRODUCT_BRACKET = re.compile(r'\[.*?\]|\(.*?\)')
 REGEX_PRODUCT_VOLUME_ANCHOR = re.compile(
     r'('
-    r'\d+(?:\.\d+)?\s*[+xX*]\s*\d+.*|'  # 3+1, 50+30ml, 1+1기획 등 (수량/용량 결합)
-    r'\d+(?:\.\d+)?\s*(?:ml|㎖|l|ℓ|g|매|호|ea|개입|입|p|종).*|' # 150ml, 2입 등 (수량/용량 단위)
-    r'\b\d+(?:\.\d+)?$' # 문장 끝에 혼자 남은 숫자 (마스크 3 등)
+    r'\d+(?:\.\d+)?\s*[+xX*]\s*\d+.*|'                                           # 3+1, 50+30ml 등 수량/용량 결합
+    r'\d+(?:\.\d+)?\s*(?:ml|㎖|l|ℓ|g|매|호|ea|개입|입|p|종)(?=[^a-zA-Z가-힣]|$).*|'  # 150ml, 100g 등
+    r'\b\d+(?:\.\d+)?$'                                                           # 문장 끝에 혼자 남은 숫자
     r').*',
     re.IGNORECASE
 )
 REGEX_PRODUCT_MARKETING = re.compile(
-    r'기획|증정|단독|1\+1|본품|추가|대용량|세트|싱글|듀오|트리플|한정|리필팩|리필|단품|구성'
+    r'기획|증정|단독|1\+1|본품|추가|대용량|세트|듀오|트리플|한정|리필팩|리필|단품|구성'
     r'|트래블\s*키트|캡슐\s*키트'
     r'|더블\s*(기획|세트|구성|\d+입|\d+\s*(ml|g|㎖))',
     re.IGNORECASE
@@ -74,6 +83,9 @@ REGEX_MULTI_SPACE = re.compile(r'\s+')
 
 # 성분명 내 쉼표 마스킹 (영숫자 사이의 쉼표)
 REGEX_COMMA_MASK = re.compile(r'(?<=[A-Za-z0-9]),(?=[A-Za-z0-9])')
+
+# typo_map_regex 공통 경계 패턴 (성분 단독 보장)
+_TYPO_BOUNDARY = r'(?<![가-힣a-zA-Z0-9\-./]){raw}(?![가-힣a-zA-Z0-9\-./])'
 
 
 # ==========================================
@@ -129,14 +141,126 @@ def resolve_category_id(
 
 
 # ==========================================
+# 내부 헬퍼
+# ==========================================
+
+
+# 올리브영 도메인 네임스페이스 — 다른 쇼핑몰 데이터 추가 시 별도 네임스페이스로 격리
+_OLIVEYOUNG_NS = uuid.uuid5(uuid.NAMESPACE_DNS, "oliveyoung.co.kr")
+
+
+def _make_product_id(brand: str, clean_name: str) -> str:
+    """
+    브랜드명 + 정제된 제품명 기반 UUID v5를 product_id로 반환합니다.
+ 
+    UUID v5(SHA-1 + 네임스페이스)를 사용하여:
+        - 동일 제품 재처리 시 항상 동일한 ID 생성 (결정적)
+        - RFC 4122 표준 포맷으로 타 시스템 연동 호환성 확보
+        - 네임스페이스로 도메인(올리브영) 격리
+ 
+    Args:
+        brand:      제품 브랜드명
+        clean_name: Step 4에서 정제된 제품명
+ 
+    Returns:
+        str: UUID v5 문자열 (예: 'a1b2c3d4-e5f6-5789-abcd-ef0123456789')
+    """
+    return str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{clean_name}"))
+ 
+ 
+def _make_error(
+    product_id, category_id, brand, product_name_raw, product_name,
+    raw_text, url, crawled_at,
+    error_type, residual_text
+) -> dict:
+    """에러 레코드 딕셔너리를 생성합니다."""
+    return {
+        'product_id':              product_id,
+        'category_id':             category_id,
+        'product_brand':           brand,
+        'product_name_raw':        product_name_raw,
+        'product_name':            product_name,
+        'product_ingredients_raw': raw_text,
+        'product_url':             url,
+        'crawled_at':              crawled_at,
+        'error_type':              error_type,
+        'residual_text':           residual_text,
+    }
+
+
+def _is_garbage_name(name: str, cfg: dict) -> bool:
+    """
+    garbage_keywords.json 설정을 기반으로 제품명이 크롤링 오류 텍스트인지 판별합니다.
+
+    판별 순서:
+        1. exact   - 완전 일치
+        2. contains - 포함 여부
+
+    Args:
+        name: 판별할 제품명 (product_name_raw)
+        cfg:  garbage_keywords.json을 로드한 dict (None이면 항상 False)
+
+    Returns:
+        True면 garbage (INVALID_METADATA_REJECTED 처리 대상)
+    """
+    if not cfg:
+        return False
+    if name in cfg.get("exact", []):
+        return True
+    for kw in cfg.get("contains", []):
+        if kw in name:
+            return True
+    return False
+
+
+_TYPO_RE_BOUNDARY = r"(?<![가-힣a-zA-Z0-9\-./]){raw}(?![가-힣a-zA-Z0-9\-./])"
+
+def _apply_typo_maps(
+    text: str,
+    typo_regex_list: list[dict],
+    typo_list: list[dict],
+) -> str:
+    """
+    typo_map_regex.json(정규식 기반) → typo_map.json(단순 치환) 순서로 오타를 보정합니다.
+
+    적용 순서:
+        1. typo_map_regex: 부분집합 오염 위험이 있는 케이스. raw 길이 내림차순으로
+           미리 정렬된 상태로 전달받으며, 경계 패턴으로 단독 성분만 치환합니다.
+        2. typo_map: 단순 문자열 치환. raw 길이 내림차순으로 미리 정렬된 상태로 전달받습니다.
+
+    Args:
+        text:             치환 대상 텍스트
+        typo_regex_list:  typo_map_regex.json 로드 결과 (list[{"raw", "fix", "pattern"}])
+        typo_list:        typo_map.json 로드 결과 (list[{"raw", "fix"}])
+
+    Returns:
+        str: 오타 보정된 텍스트
+    """
+    # 1. 정규식 기반 치환 (우선 적용, 긴 raw부터)
+    for entry in typo_regex_list:
+        if entry["raw"] in text:
+            pattern = _TYPO_RE_BOUNDARY.format(raw=re.escape(entry["raw"]))  # ← format 추가
+            text = re.sub(pattern, entry["fix"], text)
+
+    # 2. 단순 문자열 치환 (긴 raw부터)
+    for entry in typo_list:
+        if entry["raw"] in text:
+            text = text.replace(entry["raw"], entry["fix"])
+
+    return text
+
+
+# ==========================================
 # 전처리 파이프라인
 # ==========================================
 
 def process_pipeline(
     df: pd.DataFrame,
     ac_automaton: ahocorasick.Automaton,
-    synonym_dict: dict,
+    typo_list: list[dict],
+    typo_regex_list: list[dict],
     category_df: pd.DataFrame = None,
+    garbage_config: dict = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Bronze raw DataFrame을 받아 silver / error DataFrame으로 전처리합니다.
@@ -146,14 +270,16 @@ def process_pipeline(
         Step 1  - category_df로 lookup 딕셔너리 빌드
 
         [1루프: 행별 정제]
-        Step 2  - product_id uuid 생성
-        Step 3  - 제품명 기반 옵션 번들 필터링 → error
-        Step 4  - 특수기호 제거 및 구분자 치환
-        Step 5  - 유의어/오타 사전 치환
-        Step 6  - 무효 문구 일괄 소거
-        Step 7  - 이종 결합 번들 탐지 → error 또는 제거
-        Step 8  - 성분명 농도/이명 괄호 제거
-        Step 9  - 제품명 클리닝 + category_id 결정
+        Step 2  - 누락 필드 검사 → INCOMPLETE_DATA_REJECTED
+        Step 3  - 제품명 기반 필터링
+                  3a. 옵션 번들 (OPTION_BUNDLE_REJECTED)
+                  3b. garbage 제품명 (INVALID_METADATA_REJECTED)
+        Step 4  - 제품명 클리닝 + product_id 생성 (brand + clean_name 해시)
+        Step 5  - 특수기호 제거 및 구분자 치환
+        Step 6  - 오타 사전 치환 (regex 우선, 긴 raw부터)
+        Step 7  - 무효 문구 일괄 소거 + 무첨가성분 문구 제거
+        Step 8  - 이종 결합 번들 탐지 → error 또는 제거
+        Step 9  - 성분명 농도/이명 괄호 제거
         Step 10 - 중복 제거 (브랜드 + 정규화 이름 기준)
 
         [2루프: 성분 매칭]
@@ -162,10 +288,12 @@ def process_pipeline(
         Step 13 - silver / error 라우팅
 
     Args:
-        df:           Bronze raw DataFrame
-        ac_automaton: 빌드된 Aho-Corasick 오토마타
-        synonym_dict: 유의어/오타 매핑 딕셔너리
-        category_df:  oliveyoung_category_master DataFrame (None이면 category_id=None)
+        df:               Bronze raw DataFrame
+        ac_automaton:     빌드된 Aho-Corasick 오토마타
+        typo_list:        typo_map.json 로드 결과 (list[{"raw", "fix"}], 길이 내림차순)
+        typo_regex_list:  typo_map_regex.json 로드 결과 (list[{"raw", "fix", "pattern"}], 길이 내림차순)
+        category_df:      oliveyoung_category_master DataFrame (None이면 category_id=None)
+        garbage_config:   garbage_keywords.json 로드 결과 (None이면 garbage 필터 미적용)
 
     Returns:
         (silver_df, error_df)
@@ -181,12 +309,12 @@ def process_pipeline(
     # ── 1루프: 행별 정제 ────────────────────────────────────────
     for _, row in df.iterrows():
         raw_text         = str(row.get('ingredients', ''))
-        product_name_raw = str(row.get('name', 'Unknown'))
-        brand            = str(row.get('brand', 'Unknown'))
+        product_name_raw = str(row.get('name', ''))
+        brand            = str(row.get('brand', ''))
         url              = str(row.get('url', ''))
         main_category    = str(row.get('main_category', ''))
         sub_category     = str(row.get('sub_category', ''))
-        
+
         category_id = resolve_category_id(main_category, sub_category, category_lookup)
 
         crawled_at_raw = row.get('crawled_at', None)
@@ -207,61 +335,97 @@ def process_pipeline(
 
         review_stats = row.get('review_stats', {})
 
-        if not raw_text or raw_text.strip() == 'nan':
+        # [Step 2] 누락 필드 검사
+        # ingredients, name, brand, url, crawled_at, main_category, sub_category
+        # 중 하나라도 비어있으면 INCOMPLETE_DATA_REJECTED
+        def _is_blank(v: str) -> bool:
+            return not v or v.strip() in ('', 'nan')
+ 
+        missing_fields = []
+        if _is_blank(raw_text):         missing_fields.append('ingredients')
+        if _is_blank(product_name_raw): missing_fields.append('name')
+        if _is_blank(brand):            missing_fields.append('brand')
+        if _is_blank(url):              missing_fields.append('url')
+        if pd.isnull(crawled_at):       missing_fields.append('crawled_at')
+        if _is_blank(main_category):    missing_fields.append('main_category')
+        if _is_blank(sub_category):     missing_fields.append('sub_category')
+ 
+        if missing_fields:
+            tmp_id = str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{product_name_raw}"))
+            error_records.append(_make_error(
+                tmp_id, category_id, brand, product_name_raw, product_name_raw,
+                raw_text, url, crawled_at,
+                'INCOMPLETE_DATA_REJECTED',
+                f"Missing fields: {', '.join(missing_fields)}",
+            ))
             continue
 
-        # [Step 2] product_id uuid 생성
-        record_uuid = str(uuid.uuid4())
-
-        # [Step 3] 제품명 기반 옵션 번들 필터링
+        # [Step 3a] 제품명 기반 옵션 번들 필터링
         if REGEX_PRODUCT_OPTION_BUNDLE.search(product_name_raw):
+            tmp_id = str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{product_name_raw}"))
             error_records.append(_make_error(
-                record_uuid, category_id, brand, product_name_raw, product_name_raw, raw_text, url, crawled_at,
-                'OPTION_BUNDLE_REJECTED', 'Multi-option product (n-종) detected in name'
+                tmp_id, category_id, brand, product_name_raw, product_name_raw,
+                raw_text, url, crawled_at,
+                'OPTION_BUNDLE_REJECTED',
+                'Multi-option product (n-종) detected in name',
             ))
             continue
 
-        text = raw_text
-
-        # [Step 4] 특수기호 제거 및 구분자 치환
-        text = re.sub(r'[\r\n\t]', '', text)
-        text = re.sub(r'[@|]', ',', text)
-
-        # [Step 5] 유의어/오타 사전 치환
-        for typo, correct in synonym_dict.items():
-            if typo in text:
-                text = text.replace(typo, correct)
-
-        # [Step 6] 무효 데이터 및 안내 문구 일괄 소거
-        text = REGEX_PREFIX_ALL.sub('', text)
-        text = REGEX_LEGEND.sub('', text)
-        text = REGEX_ILN.sub('', text)
-        text = REGEX_LEGEND_WITH_BRACKET.sub('', text)
-        text = REGEX_SYMBOLS.sub('', text)
-
-        # [Step 7] 이종 결합 번들 탐지
-        bundle_count = len(REGEX_BUNDLE.findall(text))
-        if bundle_count >= 2:
+        # [Step 3b] garbage 제품명 필터링
+        if _is_garbage_name(product_name_raw, garbage_config):
+            tmp_id = str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{product_name_raw}"))
             error_records.append(_make_error(
-                record_uuid, category_id, brand, product_name_raw, product_name_raw, raw_text, url, crawled_at,
-                'HETEROGENEOUS_BUNDLE_REJECTED', text
+                tmp_id, category_id, brand, product_name_raw, product_name_raw,
+                raw_text, url, crawled_at,
+                'INVALID_METADATA_REJECTED',
+                f"Garbage name detected: {product_name_raw!r}",
             ))
             continue
-        elif bundle_count == 1:
-            text = REGEX_BUNDLE.sub('', text)
 
-        # [Step 8] 성분명 농도/이명 괄호 제거
-        text = REGEX_BRACKET.sub('', text)
-
-        # [Step 9] 제품명 클리닝
+        # [Step 4] 제품명 클리닝 + product_id 생성
         product_name = REGEX_PRODUCT_BRACKET.sub(' ', product_name_raw)
         product_name = REGEX_PRODUCT_VOLUME_ANCHOR.sub('', product_name)
         product_name = REGEX_PRODUCT_MARKETING.sub('', product_name)
         product_name = REGEX_PRODUCT_TAIL_SYMBOLS.sub('', product_name)
         clean_product_name = REGEX_MULTI_SPACE.sub(' ', product_name).strip()
 
+        # brand + clean_name 해시 기반 결정적 ID
+        product_id = _make_product_id(brand, clean_product_name)
+
+        text = raw_text
+
+        # [Step 5] 특수기호 제거 및 구분자 치환
+        text = re.sub(r'[\r\n\t]', '', text)
+        text = re.sub(r'[@|]', ',', text)
+
+        # [Step 6] 오타 사전 치환 (regex 우선, 긴 raw부터)
+        text = _apply_typo_maps(text, typo_regex_list, typo_list)
+
+        # [Step 7] 무효 문구 일괄 소거 + 무첨가성분 문구 제거
+        text = REGEX_PREFIX_ALL.sub('', text)
+        text = REGEX_NO_INGREDIENT.sub('', text)
+        text = REGEX_LEGEND.sub('', text)
+        text = REGEX_ILN.sub('', text)
+        text = REGEX_LEGEND_WITH_BRACKET.sub('', text)
+        text = REGEX_SYMBOLS.sub('', text)
+
+        # [Step 8] 이종 결합 번들 탐지
+        bundle_count = len(REGEX_BUNDLE.findall(text))
+        if bundle_count >= 2:
+            error_records.append(_make_error(
+                product_id, category_id, brand, product_name_raw, clean_product_name,
+                raw_text, url, crawled_at,
+                'HETEROGENEOUS_BUNDLE_REJECTED', text,
+            ))
+            continue
+        elif bundle_count == 1:
+            text = REGEX_BUNDLE.sub('', text)
+
+        # [Step 9] 성분명 농도/이명 괄호 제거
+        text = REGEX_BRACKET.sub('', text)
+
         interim_list.append({
-            'product_id':              record_uuid,
+            'product_id':              product_id,
             'category_id':             category_id,
             'product_brand':           brand,
             'product_name':            clean_product_name,
@@ -273,9 +437,6 @@ def process_pipeline(
             'review_stats':            review_stats,
             'product_url':             url,
             'crawled_at':              crawled_at,
-            # 중복 제거 후 category_id 재조회 없이 쓰기 위해 보존
-            '_main_category':          main_category,
-            '_sub_category':           sub_category,
         })
 
     if not interim_list:
@@ -289,24 +450,18 @@ def process_pipeline(
     # 성분 문자열이 짧은 쪽을 우선순위로 두기 위해 정렬
     interim_df = interim_df.sort_values('text_len', ascending=True)
 
-    # 1. 중복된 행 중 '첫 번째(살릴 것)'가 아닌 행들을 추출 (Keep='first')
+    # 1. 중복된 행 중 '첫 번째(살릴 것)'가 아닌 행들을 추출
     duplicate_mask = interim_df.duplicated(subset=['product_brand', 'name_norm'], keep='first')
-    duplicates_to_error = interim_df[duplicate_mask]
 
     # 2. 중복 행들을 error_records에 추가
-    for _, d_row in duplicates_to_error.iterrows():
-        error_records.append({
-            'product_id':              d_row['product_id'],
-            'category_id':             d_row['category_id'],
-            'product_brand':           d_row['product_brand'],
-            'product_name_raw':        d_row['product_name_raw'],
-            'product_name':            d_row['product_name'],
-            'product_ingredients_raw': d_row['product_ingredients_raw'],
-            'product_url':             d_row['product_url'],
-            'crawled_at':              d_row['crawled_at'],
-            'error_type':              'DUPLICATE_PRODUCT_REJECTED',
-            'residual_text':           f"Duplicate of {d_row['product_brand']} | {d_row['product_name']}"
-        })
+    for _, d_row in interim_df[duplicate_mask].iterrows():
+        error_records.append(_make_error(
+            d_row['product_id'], d_row['category_id'],
+            d_row['product_brand'], d_row['product_name_raw'], d_row['product_name'],
+            d_row['product_ingredients_raw'], d_row['product_url'], d_row['crawled_at'],
+            'DUPLICATE_PRODUCT_REJECTED',
+            f"Duplicate of {d_row['product_brand']} | {d_row['product_name']}",
+        ))
 
     # 3. 중복 제거된 데이터프레임 생성 (Silver 진행용)
     deduped_df = interim_df[~duplicate_mask]
@@ -316,7 +471,7 @@ def process_pipeline(
 
     for _, row in deduped_df.iterrows():
         text        = row['cleaned_text_str']
-        record_uuid = row['product_id']
+        product_id  = row['product_id']
         url         = row['product_url']
         crawled_at  = row['crawled_at']
         category_id = row['category_id']
@@ -334,18 +489,12 @@ def process_pipeline(
 
         # [Step 12-2] 히든 번들 탐지 (핵심 성분 중복)
         if matches and (matches.count('정제수') >= 2 or matches.count('글리세린') >= 2):
-            error_records.append({
-                'product_id':              record_uuid,
-                'category_id':             category_id,
-                'product_brand':           row['product_brand'],
-                'product_name_raw':        row['product_name_raw'],
-                'product_name':            row['product_name'],
-                'product_ingredients_raw': row['product_ingredients_raw'],
-                'product_url':             url,
-                'crawled_at':              crawled_at,
-                'error_type':              'HIDDEN_BUNDLE_REJECTED',
-                'residual_text':           'Duplicate Core Ingredients',
-            })
+            error_records.append(_make_error(
+                product_id, category_id,
+                row['product_brand'], row['product_name_raw'], row['product_name'],
+                row['product_ingredients_raw'], url, crawled_at,
+                'HIDDEN_BUNDLE_REJECTED', 'Duplicate Core Ingredients',
+            ))
             continue
 
         # [Step 12-3] 잔여 텍스트 마스킹 복원
@@ -353,12 +502,19 @@ def process_pipeline(
 
         # [Step 13] silver / error 라우팅
         if matches:
+            seen = set()
+            deduped = []
+            for ing in matches:
+                if ing not in seen:
+                    seen.add(ing)
+                    deduped.append(ing)
+
             silver_records.append({
-                'product_id':              record_uuid,
+                'product_id':              product_id,
                 'category_id':             category_id,
                 'product_brand':           row['product_brand'],
                 'product_name':            row['product_name'],
-                'product_ingredients':     matches,
+                'product_ingredients':     deduped,
                 'product_name_raw':        row['product_name_raw'],
                 'product_ingredients_raw': row['product_ingredients_raw'],
                 'rating':                  row['rating'],
@@ -371,41 +527,11 @@ def process_pipeline(
         if (residual_text
                 and len(residual_text.strip()) > 2
                 and re.search(r'[가-힣a-zA-Z0-9]', residual_text)):
-            error_records.append({
-                'product_id':              record_uuid,
-                'category_id':             category_id,
-                'product_brand':           row['product_brand'],
-                'product_name_raw':        row['product_name_raw'],
-                'product_name':            row['product_name'],
-                'product_ingredients_raw': row['product_ingredients_raw'],
-                'product_url':             url,
-                'crawled_at':              crawled_at,
-                'error_type':              'UNMAPPED_RESIDUAL',
-                'residual_text':           residual_text,
-            })
+            error_records.append(_make_error(
+                product_id, category_id,
+                row['product_brand'], row['product_name_raw'], row['product_name'],
+                row['product_ingredients_raw'], url, crawled_at,
+                'UNMAPPED_RESIDUAL', residual_text,
+            ))
 
     return pd.DataFrame(silver_records), pd.DataFrame(error_records)
-
-
-# ==========================================
-# 내부 헬퍼
-# ==========================================
-
-def _make_error(
-    product_id, category_id, brand, product_name_raw, product_name,
-    raw_text, url, crawled_at,
-    error_type, residual_text
-) -> dict:
-    """에러 레코드 딕셔너리를 생성합니다."""
-    return {
-        'product_id':              product_id,
-        'category_id':             category_id,
-        'product_brand':           brand,
-        'product_name_raw':        product_name_raw,
-        'product_name':            product_name,
-        'product_ingredients_raw': raw_text,
-        'product_url':             url,
-        'crawled_at':              crawled_at,
-        'error_type':              error_type,
-        'residual_text':           residual_text,
-    }
