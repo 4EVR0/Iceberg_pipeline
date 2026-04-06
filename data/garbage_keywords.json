@@ -1,0 +1,29 @@
+{
+  "_comment": {
+    "exact": "제품명이 이 문자열과 완전히 일치하면 garbage",
+    "contains": "제품명에 이 문자열이 포함되면 garbage — 어떤 위치에 있든 오염된 텍스트",
+    "regex": "정규식 매칭 — 영문자+한국어조사 패턴(JS로 등), HTML 태그 등"
+  },
+  "exact": [
+    "Document",
+    "Responsive Image",
+    "Loading...",
+    "null",
+    "undefined",
+    "이미지 확대보기",
+    "준비중",
+    "상품명",
+    "듀이트리 상세",
+    "IOPE XMD PDP"
+  ],
+  "contains": [
+    "herbloom",
+    "javascript:",
+    "onclick",
+    "http://",
+    "https://",
+    "<script",
+    "<div",
+    "JS로"
+  ]
+}
