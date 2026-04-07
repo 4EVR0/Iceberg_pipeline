@@ -40,13 +40,15 @@ REGEX_NO_INGREDIENT = re.compile(
 
 # 이종 결합 번들 탐지
 REGEX_BUNDLE = re.compile(
-    r'(?:<[^>]+>|'
-    r'■\s*[^:■]+:\s*|'
-    r'[가-힣a-zA-Z0-9]+\s*-\s*\[전성분|'
-    r'\[(?![Ii][Ll][Nn])[^\]]+\]|'
-    r'(?:^|\s)\d{1,2}\)\s*[가-힣a-zA-Z]+)'
-    r'[가-힣a-zA-Z0-9]+\s*\)\s*[가-힣a-zA-Z]+'
+    r'(?:<[^>]+>|'                                                          # <HTML태그> 형식
+    r'■\s*[^:■]+:\s*|'                                                      # ■ 섹션명: 형식
+    r'[가-힣a-zA-Z0-9]+\s*-\s*\[전성분|'                                     # 한글명-[전성분 형식
+    r'\[(?![Ii][Ll][Nn])[^\]]+\]|'                                         # [대괄호] (ILN 제외, 본품/구성품 포함)
+    r'(?:^|\s)\d{1,2}\)\s*[가-힣a-zA-Z]+|'                                  # 숫자) 형식
+    r'[가-힣a-zA-Z0-9\s]+(?:볼|앰플|세럼|크림|토너|로션)\s*[):]\s*(?=[가-힣])'  # 제품유형 구분자
+    r')'
 )
+REGEX_BONPUM_MULTI = re.compile(r'\[본품\]')
 REGEX_PRODUCT_OPTION_BUNDLE = re.compile(
     r'\d+\s*[종가지]\s*(?:(?:택|중|중\s*\d+)\s*(?:1|일|택|선택))?'
     r'|\b(?:택|선택)\s*\d+\b'
@@ -410,6 +412,14 @@ def process_pipeline(
         text = REGEX_SYMBOLS.sub('', text)
 
         # [Step 8] 이종 결합 번들 탐지
+        if len(REGEX_BONPUM_MULTI.findall(text)) >= 2:
+            error_records.append(_make_error(
+                product_id, category_id, brand, product_name_raw, clean_product_name,
+                raw_text, url, crawled_at,
+                'HETEROGENEOUS_BUNDLE_REJECTED', text,
+            ))
+            continue
+
         bundle_count = len(REGEX_BUNDLE.findall(text))
         if bundle_count >= 2:
             error_records.append(_make_error(
