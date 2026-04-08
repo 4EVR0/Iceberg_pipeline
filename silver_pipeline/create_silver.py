@@ -176,15 +176,23 @@ if __name__ == "__main__":
     catalog = Iceberg.get_catalog()
     fn = drop_and_recreate if args.recreate else create_table_if_not_exists
 
-    print(f"1. {Iceberg.SILVER_TABLE}")
+    print(f"1. {Iceberg.SILVER_CURRENT_TABLE}")
     fn(catalog,
-       table_name     = Iceberg.SILVER_TABLE,
+       table_name     = Iceberg.SILVER_CURRENT_TABLE,
        schema         = SILVER_SCHEMA,
        partition_spec = SILVER_PARTITION,
        sort_order     = SILVER_SORT_ORDER,
-       location       = S3.SILVER_PATH)
+       location       = S3.SILVER_CURRENT_PATH)
 
-    print(f"\n2. {Iceberg.SILVER_ERROR_TABLE}")
+    print(f"\n2. {Iceberg.SILVER_HISTORY_TABLE}")
+    fn(catalog,
+       table_name     = Iceberg.SILVER_HISTORY_TABLE,
+       schema         = SILVER_SCHEMA,
+       partition_spec = SILVER_PARTITION,
+       sort_order     = SILVER_SORT_ORDER,
+       location       = S3.SILVER_HISTORY_PATH)
+
+    print(f"\n3. {Iceberg.SILVER_ERROR_TABLE}")
     fn(catalog,
        table_name     = Iceberg.SILVER_ERROR_TABLE,
        schema         = SILVER_ERROR_SCHEMA,

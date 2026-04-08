@@ -24,8 +24,9 @@ class S3:
     BRONZE_GLOB_PATTERN = f"s3://{BUCKET}/{BRONZE_PREFIX}/*/*/run_id=*/*.json"  # glob 탐색용
 
     # Silver
-    SILVER_PATH          = f"s3://{BUCKET}/olive_young_silver/"
-    SILVER_ERROR_PATH    = f"s3://{BUCKET}/olive_young_silver_error/"
+    SILVER_CURRENT_PATH  = f"s3://{BUCKET}/silver/current/"
+    SILVER_HISTORY_PATH  = f"s3://{BUCKET}/silver/history/"
+    SILVER_ERROR_PATH    = f"s3://{BUCKET}/silver/error/raw/"
     CATEGORY_MASTER_PATH = f"s3://{BUCKET}/olive_young_category_master/"
 
     # Gold
@@ -44,7 +45,8 @@ class S3:
 class Iceberg:
     CATALOG_NAME          = "glue"
     DATABASE              = "oliveyoung_db"
-    SILVER_TABLE          = f"{DATABASE}.oliveyoung_silver"
+    SILVER_CURRENT_TABLE  = f"{DATABASE}.oliveyoung_silver_current"
+    SILVER_HISTORY_TABLE  = f"{DATABASE}.oliveyoung_silver_history"
     SILVER_ERROR_TABLE    = f"{DATABASE}.oliveyoung_silver_error"
     CATEGORY_MASTER_TABLE = f"{DATABASE}.oliveyoung_category_master"
 

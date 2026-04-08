@@ -233,52 +233,39 @@ def _build_arrow_table_for_error(df: pd.DataFrame, table) -> pa.Table:
 def write_to_iceberg(
     silver_df: pd.DataFrame,
     error_df: pd.DataFrame,
-    mode: str = "overwrite",
 ) -> None:
     """
-    silver / error DataFrame을 각 Iceberg 테이블에 기록합니다.
+    silver / error DataFrame을 Iceberg 테이블에 기록합니다.
 
-    Args:
-        silver_df: process_pipeline()이 반환한 silver DataFrame
-        error_df:  process_pipeline()이 반환한 error DataFrame
-        mode: "overwrite" | "append"
+    silver:
+        - current (overwrite): 항상 최신 배치 결과만 유지
+        - history (append):    배치 누적 이력 보관
 
-    주의:
-        - overwrite는 테이블 전체를 다시 쓰는 의미가 될 수 있으므로 운영에서는 신중히 사용.
-        - 배치 누적형이면 보통 append가 더 자연스럽다.
+    error:
+        - error/raw (overwrite): 최신 에러 결과 유지
     """
-    if mode not in {"overwrite", "append"}:
-        raise ValueError("mode는 'overwrite' 또는 'append'만 가능합니다.")
-
     catalog = Iceberg.get_catalog()
 
     if not silver_df.empty:
-        silver_table = _load_and_evolve_table(catalog, Iceberg.SILVER_TABLE)
-        silver_arrow = _build_arrow_table_for_silver(silver_df, silver_table)
+        # current — overwrite
+        current_table = _load_and_evolve_table(catalog, Iceberg.SILVER_CURRENT_TABLE)
+        current_arrow = _build_arrow_table_for_silver(silver_df, current_table)
+        current_table.overwrite(current_arrow)
+        print(f"   Iceberg overwrite 완료: {Iceberg.SILVER_CURRENT_TABLE} ({len(silver_df)}건)")
 
-        if mode == "overwrite":
-            silver_table.overwrite(silver_arrow)
-            action = "overwrite"
-        else:
-            silver_table.append(silver_arrow)
-            action = "append"
-
-        print(f"   Iceberg {action} 완료: {Iceberg.SILVER_TABLE} ({len(silver_df)}건)")
+        # history — append
+        history_table = _load_and_evolve_table(catalog, Iceberg.SILVER_HISTORY_TABLE)
+        history_arrow = _build_arrow_table_for_silver(silver_df, history_table)
+        history_table.append(history_arrow)
+        print(f"   Iceberg append 완료:    {Iceberg.SILVER_HISTORY_TABLE} ({len(silver_df)}건)")
     else:
         print("   silver 데이터 없음 — Iceberg write 건너뜀")
 
     if not error_df.empty:
         error_table = _load_and_evolve_table(catalog, Iceberg.SILVER_ERROR_TABLE)
         error_arrow = _build_arrow_table_for_error(error_df, error_table)
-
-        if mode == "overwrite":
-            error_table.overwrite(error_arrow)
-            action = "overwrite"
-        else:
-            error_table.append(error_arrow)
-            action = "append"
-
-        print(f"   Iceberg {action} 완료: {Iceberg.SILVER_ERROR_TABLE} ({len(error_df)}건)")
+        error_table.overwrite(error_arrow)
+        print(f"   Iceberg overwrite 완료: {Iceberg.SILVER_ERROR_TABLE} ({len(error_df)}건)")
     else:
         print("   error 데이터 없음 — Iceberg write 건너뜀")
 
@@ -311,7 +298,7 @@ def write_csv_to_s3(silver_df: pd.DataFrame, error_df: pd.DataFrame) -> None:
                 lambda v: str(v) if v is not None else None
             )
 
-        silver_table_name = Iceberg.SILVER_TABLE.split(".")[-1]
+        silver_table_name = Iceberg.SILVER_CURRENT_TABLE.split(".")[-1]
         key = f"{prefix}{silver_table_name}_{ts}.csv"
         _upload_csv(csv_df, key)
         print(f"   CSV 저장 완료: s3://{S3.BUCKET}/{key}")
