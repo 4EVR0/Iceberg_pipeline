@@ -56,13 +56,14 @@ def load_bronze_data(con):
     return raw_df
 
 
-def load_dictionaries() -> Dictionaries:
+def load_dictionaries(con) -> Dictionaries:
     """
     KCIA 사전, 유의어/오타 사전, garbage 설정, Aho-Corasick 오토마타를 준비합니다.
     """
     print("5. KCIA 성분 사전 준비...")
+    kcia_csv_path = DuckDB.get_latest_kcia_s3_path(con)
     kcia_dict = load_kcia_mapping_dict(
-        csv_path        = DataPath.KCIA_CSV,
+        csv_path        = kcia_csv_path,
         json_cache_path = DataPath.KCIA_MAPPING_JSON,
     )
     print(f"   {len(kcia_dict)}개 키워드 로드됨\n")
@@ -105,7 +106,7 @@ def run_pipeline():
         print(f"[WARN] category_master 로드 실패 → category_id=None 으로 진행: {e}\n")
         category_df = None
 
-    dicts = load_dictionaries()
+    dicts = load_dictionaries(con)
 
     print("9. 전처리 파이프라인 실행...")
     silver_df, error_df = process_pipeline(

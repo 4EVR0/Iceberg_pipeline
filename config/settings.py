@@ -23,6 +23,10 @@ class S3:
     BRONZE_PREFIX       = "oliveyoung"
     BRONZE_GLOB_PATTERN = f"s3://{BUCKET}/{BRONZE_PREFIX}/*/*/run_id=*/*.json"  # glob 탐색용
 
+    # KCIA: INCI_data_silver/kcia_cosing/batch=YYYY-MM/kcia_cosing_matched_final.csv
+    KCIA_PREFIX       = "INCI_data_silver/kcia_cosing"
+    KCIA_GLOB_PATTERN = f"s3://{BUCKET}/{KCIA_PREFIX}/batch=*/kcia_cosing_matched_final.csv"
+
     # Silver
     SILVER_CURRENT_PATH  = f"s3://{BUCKET}/silver/current/"
     SILVER_HISTORY_PATH  = f"s3://{BUCKET}/silver/history/"
@@ -73,6 +77,7 @@ class DataPath:
     TYPO_MAP_REGEX_JSON   = os.path.join(DATA_DIR, "typo_map_regex.json")
     GARBAGE_KEYWORDS_JSON = os.path.join(DATA_DIR, "garbage_keywords.json")
 
+    
 
 # ==========================================
 # DuckDB 설정
@@ -142,3 +147,38 @@ class DuckDB:
         files = df['file'].tolist()
         print(f"   최신 run_id 파일 {len(files)}개 선택됨")
         return files
+
+
+    @staticmethod
+    def get_latest_kcia_s3_path(con: duckdb.DuckDBPyConnection) -> str:
+        """
+        S3에서 batch=YYYY-MM 파티션 중 가장 최신 batch의 KCIA CSV 경로를 반환합니다.
+
+        S3 구조:
+            INCI_data_silver/kcia_cosing/batch=YYYY-MM/kcia_cosing_matched_final.csv
+
+        Returns:
+            str: 최신 batch CSV의 S3 경로
+
+        Raises:
+            RuntimeError: S3에서 파일을 찾지 못한 경우
+        """
+        df = con.execute(f"""
+            SELECT
+                file,
+                regexp_extract(file, 'batch=([^/]+)/', 1) AS batch_id
+            FROM glob('{S3.KCIA_GLOB_PATTERN}')
+            ORDER BY batch_id DESC
+            LIMIT 1
+        """).df()
+
+        if df.empty:
+            raise RuntimeError(
+                f"S3에서 KCIA CSV 파일을 찾지 못했습니다.\n"
+                f"패턴: {S3.KCIA_GLOB_PATTERN}"
+            )
+
+        path = df['file'].iloc[0]
+        batch_id = df['batch_id'].iloc[0]
+        print(f"   KCIA 최신 batch: {batch_id} ({path})")
+        return path

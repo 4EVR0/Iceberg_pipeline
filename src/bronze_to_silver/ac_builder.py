@@ -32,32 +32,35 @@ def _kcia_add(mapping: dict, name: str, std_name: str) -> None:
 def generate_kcia_mapping_dict(csv_path: str) -> dict:
     """
     KCIA 원본 CSV를 읽어 표준 매핑 딕셔너리를 생성합니다.
- 
+
+    로컬 경로와 S3 경로(s3://) 모두 지원합니다.
+    S3 경로의 경우 os.path.exists() 체크를 건너뜁니다.
+
     매핑 규칙:
         - 표준명, 공백제거 표준명 → 표준명
         - 구이명(old_name_ko, 쉼표 구분) 및 공백제거 버전 → 표준명
         - 쉼표는 _C_ 로 마스킹 (Aho-Corasick 탐색 충돌 방지)
- 
+
     Args:
-        csv_path: kcia_ingredients_source.csv 경로
- 
+        csv_path: KCIA CSV 경로 (로컬 또는 S3)
+
     Returns:
         dict: {검색키: 표준명칭}
- 
+
     Raises:
-        FileNotFoundError: CSV 파일이 존재하지 않을 때
+        FileNotFoundError: 로컬 경로인데 파일이 존재하지 않을 때
     """
-    if not os.path.exists(csv_path):
+    if not csv_path.startswith("s3://") and not os.path.exists(csv_path):
         raise FileNotFoundError(f"KCIA CSV 파일을 찾을 수 없습니다: {csv_path}")
- 
+
     df = pd.read_csv(csv_path)
- 
+
     if 'std_name_ko' not in df.columns:
         raise ValueError(
             f"CSV에 필수 컬럼 'std_name_ko'가 없습니다. "
             f"실제 컬럼: {list(df.columns)}"
         )
- 
+
     mapping = {}
 
     for _, row in df.iterrows():
@@ -71,7 +74,7 @@ def generate_kcia_mapping_dict(csv_path: str) -> dict:
         # 구이명 등록
         old_name = str(row['old_name_ko']).strip()
         _kcia_add(mapping, old_name, std_name)
- 
+
     return mapping
  
  
@@ -99,7 +102,10 @@ def load_kcia_mapping_dict(
         RuntimeError: CSV와 JSON 모두 사용 불가능한 경우
     """
     # 1. CSV 시도
-    if os.path.exists(csv_path):
+    is_s3 = csv_path.startswith("s3://")
+    csv_exists = is_s3 or os.path.exists(csv_path)
+
+    if csv_exists:
         try:
             print(f"   KCIA 사전 생성 중 (CSV: {csv_path}) ...")
             mapping = generate_kcia_mapping_dict(csv_path)
@@ -178,7 +184,7 @@ def load_garbage_config(json_path: str) -> dict:
         json_path: garbage_keywords.json 경로
 
     Returns:
-        dict: {"exact": [...], "contains": [...], "regex": [...]}
+        dict: {"exact": [...], "contains": [...]}
     """
     if not os.path.exists(json_path):
         print(f"   garbage_keywords 없음 (건너뜀): {json_path}")
@@ -187,8 +193,7 @@ def load_garbage_config(json_path: str) -> dict:
         config = json.load(f)
     exact_n    = len(config.get("exact", []))
     contains_n = len(config.get("contains", []))
-    regex_n    = len(config.get("regex", []))
-    print(f"   garbage_keywords 로드: exact={exact_n}, contains={contains_n}, regex={regex_n}")
+    print(f"   garbage_keywords 로드: exact={exact_n}, contains={contains_n}")
     return config
 
 
