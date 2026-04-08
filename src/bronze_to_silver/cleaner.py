@@ -339,7 +339,7 @@ def _clean_rows(
         if _is_blank(sub_category):     missing_fields.append('sub_category')
 
         if missing_fields:
-            tmp_id = str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{product_name_raw}"))
+            tmp_id = _make_product_id(brand, product_name_raw)
             error_records.append(_make_error(
                 tmp_id, category_id, brand, product_name_raw, product_name_raw,
                 raw_text, url, crawled_at,
@@ -350,7 +350,7 @@ def _clean_rows(
 
         # [Step 3a] 옵션 번들 필터링
         if REGEX_PRODUCT_OPTION_BUNDLE.search(product_name_raw):
-            tmp_id = str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{product_name_raw}"))
+            tmp_id = _make_product_id(brand, product_name_raw)
             error_records.append(_make_error(
                 tmp_id, category_id, brand, product_name_raw, product_name_raw,
                 raw_text, url, crawled_at,
@@ -361,7 +361,7 @@ def _clean_rows(
 
         # [Step 3b] garbage 제품명 필터링
         if _is_garbage_name(product_name_raw, garbage_config):
-            tmp_id = str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{product_name_raw}"))
+            tmp_id = _make_product_id(brand, product_name_raw)
             error_records.append(_make_error(
                 tmp_id, category_id, brand, product_name_raw, product_name_raw,
                 raw_text, url, crawled_at,
