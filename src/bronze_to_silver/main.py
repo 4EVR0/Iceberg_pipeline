@@ -13,9 +13,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from pyiceberg.catalog import load_catalog
-
-from config.settings import S3, Iceberg, DataPath, DuckDB
+from config.settings import Iceberg, DataPath, DuckDB
 from src.bronze_to_silver.ac_builder import (
     load_kcia_mapping_dict,
     load_typo_maps,
@@ -33,15 +31,8 @@ def load_category_master():
     Returns:
         pd.DataFrame: category_id, main_category, sub_category 컬럼
     """
-    catalog = load_catalog(
-        Iceberg.CATALOG_NAME,
-        **{
-            "type":      "glue",
-            "warehouse": S3.ICEBERG_METADATA_PATH,
-            "s3.region": S3.REGION,
-        }
-    )
-    table = catalog.load_table("oliveyoung_db.oliveyoung_category_master")
+    catalog = Iceberg.get_catalog()
+    table = catalog.load_table(Iceberg.CATEGORY_MASTER_TABLE)
     return table.scan().to_arrow().to_pandas()
 
 

@@ -3,14 +3,11 @@ Silver / Silver Error 테이블 Iceberg write + CSV 저장 모듈
 """
 
 import io
-import json
 from datetime import datetime, timezone
 
 import boto3
 import pandas as pd
 import pyarrow as pa
-import pyarrow.lib
-from pyiceberg.catalog import load_catalog
 
 from config.settings import S3, Iceberg
 
@@ -18,16 +15,6 @@ from config.settings import S3, Iceberg
 # ==========================================
 # Iceberg write
 # ==========================================
-
-def _get_catalog():
-    return load_catalog(
-        Iceberg.CATALOG_NAME,
-        **{
-            "type":      "glue",
-            "warehouse": S3.ICEBERG_METADATA_PATH,
-            "s3.region": S3.REGION,
-        }
-    )
 
 
 # review_stats 컬럼 타입 정의 (Iceberg 스키마와 일치: map<string, map<string, string>>)
@@ -143,7 +130,7 @@ def write_to_iceberg(silver_df: pd.DataFrame, error_df: pd.DataFrame) -> None:
         silver_df: process_pipeline()이 반환한 silver DataFrame
         error_df:  process_pipeline()이 반환한 error DataFrame
     """
-    catalog = _get_catalog()
+    catalog = Iceberg.get_catalog()
 
     if not silver_df.empty:
         table = catalog.load_table(Iceberg.SILVER_TABLE)
