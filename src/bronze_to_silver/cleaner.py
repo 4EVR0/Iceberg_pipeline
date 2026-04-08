@@ -261,60 +261,31 @@ def _apply_typo_maps(
 
 
 # ==========================================
-# 전처리 파이프라인
+# 전처리 파이프라인 (내부 단계 함수)
 # ==========================================
 
-def process_pipeline(
+def _clean_rows(
     df: pd.DataFrame,
-    ac_automaton: ahocorasick.Automaton,
+    category_lookup: dict,
     typo_list: list[dict],
     typo_regex_list: list[dict],
-    category_df: pd.DataFrame = None,
-    garbage_config: dict = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+    garbage_config: dict,
+) -> tuple[list[dict], list[dict]]:
     """
-    Bronze raw DataFrame을 받아 silver / error DataFrame으로 전처리합니다.
+    Step 2~9: 행별 정제를 수행하여 interim_list와 error_records를 반환합니다.
 
-    처리 흐름:
-        [사전 준비]
-        Step 1  - category_df로 lookup 딕셔너리 빌드
-
-        [1루프: 행별 정제]
-        Step 2  - 누락 필드 검사 → INCOMPLETE_DATA_REJECTED
-        Step 3  - 제품명 기반 필터링
-                  3a. 옵션 번들 (OPTION_BUNDLE_REJECTED)
-                  3b. garbage 제품명 (INVALID_METADATA_REJECTED)
-        Step 4  - 제품명 클리닝 + product_id 생성 (brand + clean_name 해시)
-        Step 5  - 특수기호 제거 및 구분자 치환
-        Step 6  - 오타 사전 치환 (regex 우선, 긴 raw부터)
-        Step 7  - 무효 문구 일괄 소거 + 무첨가성분 문구 제거
-        Step 8  - 이종 결합 번들 탐지 → error 또는 제거
-        Step 9  - 성분명 농도/이명 괄호 제거
-        Step 10 - 중복 제거 (브랜드 + 정규화 이름 기준)
-
-        [2루프: 성분 매칭]
-        Step 11 - 성분명 내 쉼표 마스킹
-        Step 12 - Aho-Corasick 탐색 + 히든 번들 탐지
-        Step 13 - silver / error 라우팅
-
-    Args:
-        df:               Bronze raw DataFrame
-        ac_automaton:     빌드된 Aho-Corasick 오토마타
-        typo_list:        typo_map.json 로드 결과 (list[{"raw", "fix"}], 길이 내림차순)
-        typo_regex_list:  typo_map_regex.json 로드 결과 (list[{"raw", "fix", "pattern"}], 길이 내림차순)
-        category_df:      oliveyoung_category_master DataFrame (None이면 category_id=None)
-        garbage_config:   garbage_keywords.json 로드 결과 (None이면 garbage 필터 미적용)
-
-    Returns:
-        (silver_df, error_df)
+    - Step 2: 누락 필드 검사 → INCOMPLETE_DATA_REJECTED
+    - Step 3: 제품명 기반 필터링 (옵션 번들, garbage)
+    - Step 4: 제품명 클리닝 + product_id 생성
+    - Step 5: 특수기호 제거 및 구분자 치환
+    - Step 6: 오타 사전 치환
+    - Step 7: 무효 문구 소거
+    - Step 8: 이종 결합 번들 탐지
+    - Step 9: 성분명 농도/이명 괄호 제거
     """
-    # [Step 1] category lookup 딕셔너리 빌드
-    category_lookup = build_category_lookup(category_df) if category_df is not None else {}
-
     interim_list  = []
     error_records = []
 
-    # ── 1루프: 행별 정제 ────────────────────────────────────────
     for _, row in df.iterrows():
         raw_text         = str(row.get('ingredients', ''))
         product_name_raw = str(row.get('name', ''))
@@ -344,8 +315,6 @@ def process_pipeline(
         review_stats = row.get('review_stats', {})
 
         # [Step 2] 누락 필드 검사
-        # ingredients, name, brand, url, crawled_at, main_category, sub_category
-        # 중 하나라도 비어있으면 INCOMPLETE_DATA_REJECTED
         missing_fields = []
         if _is_blank(raw_text):         missing_fields.append('ingredients')
         if _is_blank(product_name_raw): missing_fields.append('name')
@@ -354,7 +323,7 @@ def process_pipeline(
         if pd.isnull(crawled_at):       missing_fields.append('crawled_at')
         if _is_blank(main_category):    missing_fields.append('main_category')
         if _is_blank(sub_category):     missing_fields.append('sub_category')
- 
+
         if missing_fields:
             tmp_id = str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{product_name_raw}"))
             error_records.append(_make_error(
@@ -365,7 +334,7 @@ def process_pipeline(
             ))
             continue
 
-        # [Step 3a] 제품명 기반 옵션 번들 필터링
+        # [Step 3a] 옵션 번들 필터링
         if REGEX_PRODUCT_OPTION_BUNDLE.search(product_name_raw):
             tmp_id = str(uuid.uuid5(_OLIVEYOUNG_NS, f"{brand}||{product_name_raw}"))
             error_records.append(_make_error(
@@ -393,8 +362,6 @@ def process_pipeline(
         product_name = REGEX_PRODUCT_MARKETING.sub('', product_name)
         product_name = REGEX_PRODUCT_TAIL_SYMBOLS.sub('', product_name)
         clean_product_name = REGEX_MULTI_SPACE.sub(' ', product_name).strip()
-
-        # brand + clean_name 해시 기반 결정적 ID
         product_id = _make_product_id(brand, clean_product_name)
 
         text = raw_text
@@ -403,10 +370,10 @@ def process_pipeline(
         text = re.sub(r'[\r\n\t]', '', text)
         text = re.sub(r'[@|]', ',', text)
 
-        # [Step 6] 오타 사전 치환 (regex 우선, 긴 raw부터)
+        # [Step 6] 오타 사전 치환
         text = _apply_typo_maps(text, typo_regex_list, typo_list)
 
-        # [Step 7] 무효 문구 일괄 소거 + 무첨가성분 문구 제거
+        # [Step 7] 무효 문구 소거
         text = REGEX_PREFIX_ALL.sub('', text)
         text = REGEX_NO_INGREDIENT.sub('', text)
         text = REGEX_LEGEND.sub('', text)
@@ -452,35 +419,49 @@ def process_pipeline(
             'crawled_at':              crawled_at,
         })
 
-    if not interim_list:
-        return pd.DataFrame(), pd.DataFrame(error_records)
+    return interim_list, error_records
 
-    # [Step 10] 중복 제거 (브랜드 + 정규화 이름 기준, 성분 문자열이 짧은 쪽 유지)
+
+def _dedup_interim(interim_list: list[dict]) -> tuple[pd.DataFrame, list[dict]]:
+    """
+    Step 10: 브랜드 + 정규화 이름 기준 중복을 제거합니다.
+    성분 문자열이 짧은 쪽을 유지하고, 나머지는 DUPLICATE_PRODUCT_REJECTED로 반환합니다.
+    """
     interim_df = pd.DataFrame(interim_list)
     interim_df['text_len']  = interim_df['cleaned_text_str'].apply(len)
     interim_df['name_norm'] = interim_df['product_name'].str.replace(" ", "", regex=False)
-
-    # 성분 문자열이 짧은 쪽을 우선순위로 두기 위해 정렬
     interim_df = interim_df.sort_values('text_len', ascending=True)
 
-    # 1. 중복된 행 중 '첫 번째(살릴 것)'가 아닌 행들을 추출
     duplicate_mask = interim_df.duplicated(subset=['product_brand', 'name_norm'], keep='first')
 
-    # 2. 중복 행들을 error_records에 추가
-    for _, d_row in interim_df[duplicate_mask].iterrows():
-        error_records.append(_make_error(
-            d_row['product_id'], d_row['category_id'],
-            d_row['product_brand'], d_row['product_name_raw'], d_row['product_name'],
-            d_row['product_ingredients_raw'], d_row['product_url'], d_row['crawled_at'],
+    duplicate_errors = [
+        _make_error(
+            r['product_id'], r['category_id'],
+            r['product_brand'], r['product_name_raw'], r['product_name'],
+            r['product_ingredients_raw'], r['product_url'], r['crawled_at'],
             'DUPLICATE_PRODUCT_REJECTED',
-            f"Duplicate of {d_row['product_brand']} | {d_row['product_name']}",
-        ))
+            f"Duplicate of {r['product_brand']} | {r['product_name']}",
+        )
+        for r in interim_df[duplicate_mask].to_dict('records')
+    ]
 
-    # 3. 중복 제거된 데이터프레임 생성 (Silver 진행용)
     deduped_df = interim_df[~duplicate_mask]
+    return deduped_df, duplicate_errors
 
-    # ── 2루프: 성분 매칭 ────────────────────────────────────────
+
+def _match_ingredients(
+    deduped_df: pd.DataFrame,
+    ac_automaton: ahocorasick.Automaton,
+) -> tuple[list[dict], list[dict]]:
+    """
+    Step 11~13: Aho-Corasick 성분 매칭 후 silver / error 레코드를 반환합니다.
+
+    - Step 11: 성분명 내 쉼표 마스킹
+    - Step 12: Aho-Corasick 탐색 + 히든 번들 탐지
+    - Step 13: silver / error 라우팅
+    """
     silver_records = []
+    error_records  = []
 
     for _, row in deduped_df.iterrows():
         text        = row['cleaned_text_str']
@@ -500,7 +481,7 @@ def process_pipeline(
 
         matches, residual = search_with_ac(processed_text, ac_automaton)
 
-        # [Step 12-2] 히든 번들 탐지 (핵심 성분 중복)
+        # [Step 12-2] 히든 번들 탐지
         if matches and (matches.count('정제수') >= 2 or matches.count('글리세린') >= 2):
             error_records.append(_make_error(
                 product_id, category_id,
@@ -516,11 +497,7 @@ def process_pipeline(
         # [Step 13] silver / error 라우팅
         if matches:
             seen = set()
-            deduped = []
-            for ing in matches:
-                if ing not in seen:
-                    seen.add(ing)
-                    deduped.append(ing)
+            deduped = [ing for ing in matches if ing not in seen and not seen.add(ing)]
 
             silver_records.append({
                 'product_id':              product_id,
@@ -546,5 +523,59 @@ def process_pipeline(
                 row['product_ingredients_raw'], url, crawled_at,
                 'UNMAPPED_RESIDUAL', residual_text,
             ))
+
+    return silver_records, error_records
+
+
+# ==========================================
+# 전처리 파이프라인 (오케스트레이터)
+# ==========================================
+
+def process_pipeline(
+    df: pd.DataFrame,
+    ac_automaton: ahocorasick.Automaton,
+    typo_list: list[dict],
+    typo_regex_list: list[dict],
+    category_df: pd.DataFrame = None,
+    garbage_config: dict = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Bronze raw DataFrame을 받아 silver / error DataFrame으로 전처리합니다.
+
+    처리 흐름:
+        Step 1  - category lookup 딕셔너리 빌드
+        Step 2~9  → _clean_rows()
+        Step 10   → _dedup_interim()
+        Step 11~13 → _match_ingredients()
+
+    Args:
+        df:               Bronze raw DataFrame
+        ac_automaton:     빌드된 Aho-Corasick 오토마타
+        typo_list:        typo_map.json 로드 결과 (list[{"raw", "fix"}], 길이 내림차순)
+        typo_regex_list:  typo_map_regex.json 로드 결과 (list[{"raw", "fix", "pattern"}], 길이 내림차순)
+        category_df:      oliveyoung_category_master DataFrame (None이면 category_id=None)
+        garbage_config:   garbage_keywords.json 로드 결과 (None이면 garbage 필터 미적용)
+
+    Returns:
+        (silver_df, error_df)
+    """
+    # [Step 1] category lookup 빌드
+    category_lookup = build_category_lookup(category_df) if category_df is not None else {}
+
+    # [Step 2~9] 행별 정제
+    interim_list, error_records = _clean_rows(
+        df, category_lookup, typo_list, typo_regex_list, garbage_config
+    )
+
+    if not interim_list:
+        return pd.DataFrame(), pd.DataFrame(error_records)
+
+    # [Step 10] 중복 제거
+    deduped_df, duplicate_errors = _dedup_interim(interim_list)
+    error_records.extend(duplicate_errors)
+
+    # [Step 11~13] 성분 매칭
+    silver_records, match_errors = _match_ingredients(deduped_df, ac_automaton)
+    error_records.extend(match_errors)
 
     return pd.DataFrame(silver_records), pd.DataFrame(error_records)
