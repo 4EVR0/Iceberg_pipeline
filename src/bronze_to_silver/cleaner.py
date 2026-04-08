@@ -17,6 +17,7 @@ import pandas as pd
 import ahocorasick
 
 from src.bronze_to_silver.ac_builder import search_with_ac
+from models.pipeline_models import ErrorRecord
 
 
 # ==========================================
@@ -178,23 +179,30 @@ def _make_product_id(brand: str, clean_name: str) -> str:
  
  
 def _make_error(
-    product_id, category_id, brand, product_name_raw, product_name,
-    raw_text, url, crawled_at,
-    error_type, residual_text
-) -> dict:
-    """에러 레코드 딕셔너리를 생성합니다."""
-    return {
-        'product_id':              product_id,
-        'category_id':             category_id,
-        'product_brand':           brand,
-        'product_name_raw':        product_name_raw,
-        'product_name':            product_name,
-        'product_ingredients_raw': raw_text,
-        'product_url':             url,
-        'crawled_at':              crawled_at,
-        'error_type':              error_type,
-        'residual_text':           residual_text,
-    }
+    product_id:              str,
+    category_id:             str | None,
+    brand:                   str,
+    product_name_raw:        str,
+    product_name:            str,
+    raw_text:                str,
+    url:                     str,
+    crawled_at,
+    error_type:              str,
+    residual_text:           str,
+) -> ErrorRecord:
+    """에러 레코드를 생성합니다."""
+    return ErrorRecord(
+        product_id              = product_id,
+        category_id             = category_id,
+        product_brand           = brand,
+        product_name_raw        = product_name_raw,
+        product_name            = product_name,
+        product_ingredients_raw = raw_text,
+        product_url             = url,
+        crawled_at              = crawled_at,
+        error_type              = error_type,
+        residual_text           = residual_text,
+    )
 
 
 def _is_blank(v: str) -> bool:
@@ -573,7 +581,7 @@ def process_pipeline(
     )
 
     if not interim_list:
-        return pd.DataFrame(), pd.DataFrame(error_records)
+        return pd.DataFrame(), pd.DataFrame([r.to_dict() for r in error_records])
 
     # [Step 10] 중복 제거
     deduped_df, duplicate_errors = _dedup_interim(interim_list)
@@ -584,7 +592,7 @@ def process_pipeline(
     error_records.extend(match_errors)
 
     silver_df = pd.DataFrame(silver_records)
-    error_df  = pd.DataFrame(error_records)
+    error_df  = pd.DataFrame([r.to_dict() for r in error_records])
 
     for df_ in (silver_df, error_df):
         if not df_.empty:
