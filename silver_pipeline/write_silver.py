@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import boto3
 import pandas as pd
 import pyarrow as pa
+from pyiceberg.types import StringType, TimestamptzType
 
 from config.settings import S3, Iceberg
 
@@ -136,6 +137,19 @@ def _to_arrow_error(df: pd.DataFrame) -> pa.Table:
     return table.cast(_SILVER_ERROR_PA_SCHEMA)
 
 
+def _evolve_schema(table) -> None:
+    """
+    테이블에 batch_job, batch_date 컬럼이 없으면 추가합니다.
+    이미 존재하면 무시합니다.
+    """
+    existing = {f.name for f in table.schema().fields}
+    with table.update_schema() as update:
+        if "batch_job" not in existing:
+            update.add_column("batch_job", StringType())
+        if "batch_date" not in existing:
+            update.add_column("batch_date", TimestamptzType())
+
+
 def write_to_iceberg(silver_df: pd.DataFrame, error_df: pd.DataFrame) -> None:
     """
     silver / error DataFrame을 각 Iceberg 테이블에 overwrite 합니다.
@@ -148,6 +162,7 @@ def write_to_iceberg(silver_df: pd.DataFrame, error_df: pd.DataFrame) -> None:
 
     if not silver_df.empty:
         table = catalog.load_table(Iceberg.SILVER_TABLE)
+        _evolve_schema(table)
         table.overwrite(_to_arrow_silver(silver_df))
         print(f"   Iceberg overwrite 완료: {Iceberg.SILVER_TABLE} ({len(silver_df)}건)")
     else:
@@ -155,6 +170,7 @@ def write_to_iceberg(silver_df: pd.DataFrame, error_df: pd.DataFrame) -> None:
 
     if not error_df.empty:
         table = catalog.load_table(Iceberg.SILVER_ERROR_TABLE)
+        _evolve_schema(table)
         table.overwrite(_to_arrow_error(error_df))
         print(f"   Iceberg overwrite 완료: {Iceberg.SILVER_ERROR_TABLE} ({len(error_df)}건)")
     else:
