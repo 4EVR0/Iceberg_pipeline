@@ -90,6 +90,10 @@ REGEX_MULTI_SPACE = re.compile(r'\s+')
 # 성분명 내 쉼표 마스킹 (영숫자 사이의 쉼표)
 REGEX_COMMA_MASK = re.compile(r'(?<=[A-Za-z0-9]),(?=[A-Za-z0-9])')
 
+# 성분 문자열 전처리 (줄바꿈/탭 제거, 구분자 통일)
+REGEX_WHITESPACE_CTRL = re.compile(r'[\r\n\t]')
+REGEX_ALT_SEPARATOR   = re.compile(r'[@|]')
+
 # typo_map_regex 공통 경계 패턴 (성분 단독 보장)
 _TYPO_RE_BOUNDARY = r'(?<![가-힣a-zA-Z0-9\-./]){raw}(?![가-힣a-zA-Z0-9\-./])'
 
@@ -377,8 +381,8 @@ def _clean_rows(
         text = raw_text
 
         # [Step 5] 특수기호 제거 및 구분자 치환
-        text = re.sub(r'[\r\n\t]', '', text)
-        text = re.sub(r'[@|]', ',', text)
+        text = REGEX_WHITESPACE_CTRL.sub('', text)
+        text = REGEX_ALT_SEPARATOR.sub(',', text)
 
         # [Step 6] 오타 사전 치환
         text = _apply_typo_maps(text, typo_regex_list, typo_list)
