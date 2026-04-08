@@ -65,7 +65,9 @@ SILVER_SCHEMA = Schema(
     NestedField(9,  "review_count",            IntegerType(),     required=False),
     NestedField(10, "review_stats",            REVIEW_STATS_TYPE, required=False),
     NestedField(11, "product_url",             StringType(),      required=False),
-    NestedField(12, "crawled_at",              TimestamptzType(),   required=False),
+    NestedField(12, "crawled_at",              TimestamptzType(), required=False),
+    NestedField(13, "batch_job",               StringType(),      required=False),
+    NestedField(14, "batch_date",              TimestamptzType(), required=False),
 )
 
 # DLQ 패턴: 에러 원인 추적에 필요한 컬럼만 유지
@@ -78,8 +80,10 @@ SILVER_ERROR_SCHEMA = Schema(
     NestedField(5, "product_ingredients_raw", StringType(),    required=False),
     NestedField(6, "product_url",             StringType(),    required=False),
     NestedField(7, "crawled_at",              TimestamptzType(), required=False),
-    NestedField(8, "error_type",              StringType(),    required=False),
-    NestedField(9, "residual_text",           StringType(),    required=False),
+    NestedField(8,  "error_type",              StringType(),    required=False),
+    NestedField(9,  "residual_text",           StringType(),    required=False),
+    NestedField(10, "batch_job",               StringType(),    required=False),
+    NestedField(11, "batch_date",              TimestamptzType(), required=False),
 )
 
 
