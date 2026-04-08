@@ -131,7 +131,7 @@ def resolve_category_id(
     main_category: str,
     sub_category: str,
     lookup: dict
-) -> str:
+) -> str | None:
     """
     (main_category, sub_category) 쌍으로 category_id를 반환합니다.
     매칭 실패 시 None을 반환합니다.
@@ -263,7 +263,7 @@ def _apply_typo_maps(
     # 1. 정규식 기반 치환 (우선 적용, 긴 raw부터)
     for entry in typo_regex_list:
         if entry["raw"] in text:
-            pattern = _TYPO_RE_BOUNDARY.format(raw=re.escape(entry["raw"]))  # ← format 추가
+            pattern = _TYPO_RE_BOUNDARY.format(raw=re.escape(entry["raw"]))
             text = re.sub(pattern, entry["fix"], text)
 
     # 2. 단순 문자열 치환 (긴 raw부터)
@@ -459,7 +459,7 @@ def _dedup_interim(interim_list: list[dict]) -> tuple[pd.DataFrame, list[dict]]:
         for r in interim_df[duplicate_mask].to_dict('records')
     ]
 
-    deduped_df = interim_df[~duplicate_mask]
+    deduped_df = interim_df[~duplicate_mask].drop(columns=['text_len', 'name_norm'])
     return deduped_df, duplicate_errors
 
 
