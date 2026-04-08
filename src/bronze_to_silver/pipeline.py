@@ -3,11 +3,9 @@ Bronze → Silver 전처리 파이프라인 오케스트레이션 로직
 """
 
 import sys
-from dataclasses import dataclass
-
-import ahocorasick
 
 from config.settings import Iceberg, DataPath, DuckDB
+from models.pipeline_models import Dictionaries
 from src.bronze_to_silver.ac_builder import (
     load_kcia_mapping_dict,
     load_typo_maps,
@@ -56,14 +54,6 @@ def load_bronze_data(con):
     print(f"   로드 완료: {len(raw_df)}건\n")
 
     return raw_df
-
-
-@dataclass
-class Dictionaries:
-    ac_automaton:    ahocorasick.Automaton
-    typo_list:       list[dict]
-    typo_regex_list: list[dict]
-    garbage_config:  dict
 
 
 def load_dictionaries() -> Dictionaries:
