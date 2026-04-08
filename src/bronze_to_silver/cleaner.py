@@ -11,9 +11,10 @@
 
 import re
 import uuid
-import json
 import pandas as pd
 import ahocorasick
+
+from src.bronze_to_silver.ac_builder import search_with_ac
 
 
 # ==========================================
@@ -87,7 +88,7 @@ REGEX_MULTI_SPACE = re.compile(r'\s+')
 REGEX_COMMA_MASK = re.compile(r'(?<=[A-Za-z0-9]),(?=[A-Za-z0-9])')
 
 # typo_map_regex 공통 경계 패턴 (성분 단독 보장)
-_TYPO_BOUNDARY = r'(?<![가-힣a-zA-Z0-9\-./]){raw}(?![가-힣a-zA-Z0-9\-./])'
+_TYPO_RE_BOUNDARY = r'(?<![가-힣a-zA-Z0-9\-./]){raw}(?![가-힣a-zA-Z0-9\-./])'
 
 
 # ==========================================
@@ -190,6 +191,11 @@ def _make_error(
     }
 
 
+def _is_blank(v: str) -> bool:
+    """빈 문자열 또는 'nan' 문자열이면 True를 반환합니다."""
+    return not v or v.strip() in ('', 'nan')
+
+
 def _is_garbage_name(name: str, cfg: dict) -> bool:
     """
     garbage_keywords.json 설정을 기반으로 제품명이 크롤링 오류 텍스트인지 판별합니다.
@@ -214,8 +220,6 @@ def _is_garbage_name(name: str, cfg: dict) -> bool:
             return True
     return False
 
-
-_TYPO_RE_BOUNDARY = r"(?<![가-힣a-zA-Z0-9\-./]){raw}(?![가-힣a-zA-Z0-9\-./])"
 
 def _apply_typo_maps(
     text: str,
@@ -300,8 +304,6 @@ def process_pipeline(
     Returns:
         (silver_df, error_df)
     """
-    from src.bronze_to_silver.ac_builder import search_with_ac
-
     # [Step 1] category lookup 딕셔너리 빌드
     category_lookup = build_category_lookup(category_df) if category_df is not None else {}
 
@@ -340,9 +342,6 @@ def process_pipeline(
         # [Step 2] 누락 필드 검사
         # ingredients, name, brand, url, crawled_at, main_category, sub_category
         # 중 하나라도 비어있으면 INCOMPLETE_DATA_REJECTED
-        def _is_blank(v: str) -> bool:
-            return not v or v.strip() in ('', 'nan')
- 
         missing_fields = []
         if _is_blank(raw_text):         missing_fields.append('ingredients')
         if _is_blank(product_name_raw): missing_fields.append('name')
