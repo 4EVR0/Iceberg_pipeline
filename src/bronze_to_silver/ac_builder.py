@@ -17,6 +17,18 @@ import ahocorasick
 # 1. KCIA 매핑 딕셔너리 생성
 # ==========================================
 
+def _kcia_add(mapping: dict, name: str, std_name: str) -> None:
+    """name을 마스킹/공백제거하여 mapping에 std_name으로 등록합니다."""
+    if not name or pd.isna(name):
+        return
+    name = str(name).strip()
+    if not name or name == 'nan':
+        return
+    masked = name.replace(",", "_C_")
+    mapping[masked] = std_name
+    mapping[masked.replace(" ", "")] = std_name
+
+
 def generate_kcia_mapping_dict(csv_path: str) -> dict:
     """
     KCIA 원본 CSV를 읽어 표준 매핑 딕셔너리를 생성합니다.
@@ -47,28 +59,18 @@ def generate_kcia_mapping_dict(csv_path: str) -> dict:
         )
  
     mapping = {}
- 
-    def _add(name: str, std_name: str):
-        if not name or pd.isna(name):
-            return
-        name = str(name).strip()
-        if not name or name == 'nan':
-            return
-        masked = name.replace(",", "_C_")
-        mapping[masked] = std_name
-        mapping[masked.replace(" ", "")] = std_name
- 
+
     for _, row in df.iterrows():
         if pd.isna(row.get('std_name_ko')):
             continue
         std_name = str(row['std_name_ko']).strip()
- 
+
         # 표준명 등록
-        _add(std_name, std_name)
+        _kcia_add(mapping, std_name, std_name)
 
         # 구이명 등록
         old_name = str(row['old_name_ko']).strip()
-        _add(old_name, std_name)
+        _kcia_add(mapping, old_name, std_name)
  
     return mapping
  

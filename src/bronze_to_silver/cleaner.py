@@ -111,8 +111,12 @@ def build_category_lookup(category_df: pd.DataFrame) -> dict:
         dict: {(main_category, sub_category): category_id}
     """
     return {
-        (row["main_category"], row["sub_category"]): row["category_id"]
-        for _, row in category_df.iterrows()
+        (m, s): c
+        for m, s, c in zip(
+            category_df["main_category"],
+            category_df["sub_category"],
+            category_df["category_id"],
+        )
     }
 
 
