@@ -3,6 +3,9 @@ Bronze → Silver 전처리 파이프라인 오케스트레이션 로직
 """
 
 import sys
+from dataclasses import dataclass
+
+import ahocorasick
 
 from config.settings import Iceberg, DataPath, DuckDB
 from src.bronze_to_silver.ac_builder import (
@@ -55,12 +58,17 @@ def load_bronze_data(con):
     return raw_df
 
 
-def load_dictionaries():
+@dataclass
+class Dictionaries:
+    ac_automaton:    ahocorasick.Automaton
+    typo_list:       list[dict]
+    typo_regex_list: list[dict]
+    garbage_config:  dict
+
+
+def load_dictionaries() -> Dictionaries:
     """
     KCIA 사전, 유의어/오타 사전, garbage 설정, Aho-Corasick 오토마타를 준비합니다.
-
-    Returns:
-        tuple: (ac_automaton, typo_list, typo_regex_list, garbage_config)
     """
     print("5. KCIA 성분 사전 준비...")
     kcia_dict = load_kcia_mapping_dict(
@@ -82,7 +90,12 @@ def load_dictionaries():
     ac_automaton = build_ahocorasick(kcia_dict)
     print("   빌드 완료\n")
 
-    return ac_automaton, typo_list, typo_regex_list, garbage_config
+    return Dictionaries(
+        ac_automaton    = ac_automaton,
+        typo_list       = typo_list,
+        typo_regex_list = typo_regex_list,
+        garbage_config  = garbage_config,
+    )
 
 
 def run_pipeline():
@@ -102,16 +115,16 @@ def run_pipeline():
         print(f"[WARN] category_master 로드 실패 → category_id=None 으로 진행: {e}\n")
         category_df = None
 
-    ac_automaton, typo_list, typo_regex_list, garbage_config = load_dictionaries()
+    dicts = load_dictionaries()
 
     print("9. 전처리 파이프라인 실행...")
     silver_df, error_df = process_pipeline(
         df              = raw_df,
-        ac_automaton    = ac_automaton,
-        typo_list       = typo_list,
-        typo_regex_list = typo_regex_list,
+        ac_automaton    = dicts.ac_automaton,
+        typo_list       = dicts.typo_list,
+        typo_regex_list = dicts.typo_regex_list,
         category_df     = category_df,
-        garbage_config  = garbage_config,
+        garbage_config  = dicts.garbage_config,
     )
     print(f"   정상: {len(silver_df)}건 / 에러: {len(error_df)}건\n")
 
