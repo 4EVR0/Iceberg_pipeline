@@ -11,6 +11,8 @@
 
 import re
 import uuid
+from datetime import datetime, timezone
+
 import pandas as pd
 import ahocorasick
 
@@ -559,6 +561,9 @@ def process_pipeline(
     Returns:
         (silver_df, error_df)
     """
+    batch_job  = "oliveyoung_bronze_to_silver_process"
+    batch_date = datetime.now(timezone.utc)
+
     # [Step 1] category lookup 빌드
     category_lookup = build_category_lookup(category_df) if category_df is not None else {}
 
@@ -578,4 +583,12 @@ def process_pipeline(
     silver_records, match_errors = _match_ingredients(deduped_df, ac_automaton)
     error_records.extend(match_errors)
 
-    return pd.DataFrame(silver_records), pd.DataFrame(error_records)
+    silver_df = pd.DataFrame(silver_records)
+    error_df  = pd.DataFrame(error_records)
+
+    for df_ in (silver_df, error_df):
+        if not df_.empty:
+            df_["batch_job"]  = batch_job
+            df_["batch_date"] = pd.Timestamp(batch_date)
+
+    return silver_df, error_df

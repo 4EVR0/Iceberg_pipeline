@@ -40,6 +40,8 @@ _SILVER_PA_SCHEMA = pa.schema([
     pa.field("review_stats",            _REVIEW_STATS_PA_TYPE, nullable=True),
     pa.field("product_url",             pa.string(),    nullable=True),
     pa.field("crawled_at",              pa.timestamp("us", tz="UTC"), nullable=True),
+    pa.field("batch_job",               pa.string(),    nullable=True),
+    pa.field("batch_date",              pa.timestamp("us", tz="UTC"), nullable=True),
 ])
 
 
@@ -55,6 +57,8 @@ _SILVER_ERROR_PA_SCHEMA = pa.schema([
     pa.field("crawled_at",              pa.timestamp("us", tz="UTC"), nullable=True),
     pa.field("error_type",              pa.string(),        nullable=True),
     pa.field("residual_text",           pa.string(),        nullable=True),
+    pa.field("batch_job",               pa.string(),        nullable=True),
+    pa.field("batch_date",              pa.timestamp("us", tz="UTC"), nullable=True),
 ])
 
 
@@ -92,6 +96,11 @@ def _to_arrow_silver(df: pd.DataFrame) -> pa.Table:
                 pd.to_datetime(df["crawled_at"], utc=True),
                 type=pa.timestamp("us", tz="UTC"),
             ),
+            "batch_job":               pa.array(df["batch_job"],               type=pa.string()),
+            "batch_date":              pa.array(
+                pd.to_datetime(df["batch_date"], utc=True),
+                type=pa.timestamp("us", tz="UTC"),
+            ),
         },
     )
     # pa.table()은 nullable을 재추론하므로 product_id required 보장을 위해 cast로 강제 적용
@@ -117,6 +126,11 @@ def _to_arrow_error(df: pd.DataFrame) -> pa.Table:
             ),
             "error_type":              pa.array(df["error_type"],              type=pa.string()),
             "residual_text":           pa.array(df["residual_text"],           type=pa.string()),
+            "batch_job":               pa.array(df["batch_job"],               type=pa.string()),
+            "batch_date":              pa.array(
+                pd.to_datetime(df["batch_date"], utc=True),
+                type=pa.timestamp("us", tz="UTC"),
+            ),
         },
     )
     return table.cast(_SILVER_ERROR_PA_SCHEMA)
