@@ -12,10 +12,13 @@ class Dictionaries:
     garbage_config:  dict
 
 
+
 @dataclass
 class ErrorRecord:
     product_id:              str
-    category_id:             str | None
+    category:                str | None
+    main_category:           str | None
+    sub_category:            str | None
     product_brand:           str
     product_name_raw:        str
     product_name:            str
