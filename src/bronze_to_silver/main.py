@@ -1,0 +1,20 @@
+"""
+Bronze → Silver 전처리 파이프라인 진입점
+
+실행:
+    cd Iceberg_pipeline
+    python src/bronze_to_silver/main.py
+"""
+
+import sys
+import os
+
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+from src.bronze_to_silver.pipeline import run_pipeline
+
+
+if __name__ == "__main__":
+    run_pipeline()

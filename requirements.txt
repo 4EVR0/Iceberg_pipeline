@@ -1,0 +1,7 @@
+pandas
+pyahocorasick
+pyiceberg
+duckdb
+boto3
+pyarrow
+ipykernel
