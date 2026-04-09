@@ -52,7 +52,9 @@ class Iceberg:
     SILVER_CURRENT_TABLE  = f"{DATABASE}.oliveyoung_silver_current"
     SILVER_HISTORY_TABLE  = f"{DATABASE}.oliveyoung_silver_history"
     SILVER_ERROR_TABLE    = f"{DATABASE}.oliveyoung_silver_error"
-    CATEGORY_MASTER_TABLE = f"{DATABASE}.oliveyoung_category_master"
+    CATEGORY_MASTER_TABLE              = f"{DATABASE}.oliveyoung_category_master"
+    GOLD_INGREDIENT_FREQUENCY_TABLE    = f"{DATABASE}.gold_ingredient_frequency"
+    GOLD_PRODUCT_CHANGE_LOG_TABLE      = f"{DATABASE}.gold_product_change_log"
 
     @staticmethod
     def get_catalog():
