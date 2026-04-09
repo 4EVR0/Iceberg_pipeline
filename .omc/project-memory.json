@@ -1,0 +1,241 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1775626925594,
+  "projectRoot": "/home/jaewon/jaewon/Iceberg_pipeline",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "pip",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": "snake_case",
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "config": {
+      "path": "config",
+      "purpose": "Configuration files",
+      "fileCount": 1,
+      "lastAccessed": 1775626925586,
+      "keyFiles": [
+        "settings.py"
+      ]
+    },
+    "data": {
+      "path": "data",
+      "purpose": "Data files",
+      "fileCount": 5,
+      "lastAccessed": 1775626925588,
+      "keyFiles": [
+        "garbage_keywords.json",
+        "kcia_ingredient_dict2.csv",
+        "kcia_mapping_dict.json",
+        "typo_map.json",
+        "typo_map_regex.json"
+      ]
+    },
+    "docker-volume": {
+      "path": "docker-volume",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1775626925591,
+      "keyFiles": []
+    },
+    "gold_pipeline": {
+      "path": "gold_pipeline",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1775626925592,
+      "keyFiles": [
+        "create_gold_frequency_table.py",
+        "query_gold_frequency.py"
+      ]
+    },
+    "jupyter": {
+      "path": "jupyter",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1775626925592,
+      "keyFiles": [
+        "check_category_master.ipynb",
+        "check_data.ipynb"
+      ]
+    },
+    "models": {
+      "path": "models",
+      "purpose": "Data models",
+      "fileCount": 2,
+      "lastAccessed": 1775626925592,
+      "keyFiles": [
+        "__init__.py",
+        "pipeline_models.py"
+      ]
+    },
+    "silver_pipeline": {
+      "path": "silver_pipeline",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1775626925592,
+      "keyFiles": [
+        "create_category_master.py",
+        "create_silver.py",
+        "schemas.py",
+        "write_silver.py"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1775626925592,
+      "keyFiles": [
+        "gold_ingredient_frequency.py"
+      ]
+    },
+    "venv": {
+      "path": "venv",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1775626925592,
+      "keyFiles": [
+        "pyvenv.cfg"
+      ]
+    },
+    "venv/bin": {
+      "path": "venv/bin",
+      "purpose": "Executable scripts",
+      "fileCount": 24,
+      "lastAccessed": 1775626925593,
+      "keyFiles": [
+        "Activate.ps1",
+        "activate",
+        "activate.csh"
+      ]
+    },
+    "venv/lib": {
+      "path": "venv/lib",
+      "purpose": "Library code",
+      "fileCount": 0,
+      "lastAccessed": 1775626925593,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "",
+      "accessCount": 1,
+      "lastAccessed": 1775699247353,
+      "type": "directory"
+    },
+    {
+      "path": "requirements.txt",
+      "accessCount": 1,
+      "lastAccessed": 1775699250654,
+      "type": "file"
+    },
+    {
+      "path": ".env",
+      "accessCount": 1,
+      "lastAccessed": 1775699250967,
+      "type": "file"
+    },
+    {
+      "path": "src/bronze_to_silver/pipeline.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699256062,
+      "type": "file"
+    },
+    {
+      "path": "src/bronze_to_silver/main.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699256126,
+      "type": "file"
+    },
+    {
+      "path": "models/pipeline_models.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699256163,
+      "type": "file"
+    },
+    {
+      "path": "config/settings.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699256197,
+      "type": "file"
+    },
+    {
+      "path": "silver_pipeline/schemas.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699256234,
+      "type": "file"
+    },
+    {
+      "path": "silver_pipeline/write_silver.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699261348,
+      "type": "file"
+    },
+    {
+      "path": "gold_pipeline/create_gold_frequency_table.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699261587,
+      "type": "file"
+    },
+    {
+      "path": "silver_pipeline/create_silver.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699265928,
+      "type": "file"
+    },
+    {
+      "path": "silver_pipeline/create_category_master.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699266362,
+      "type": "file"
+    },
+    {
+      "path": "gold_pipeline/query_gold_frequency.py",
+      "accessCount": 1,
+      "lastAccessed": 1775699285514,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 1,
+      "lastAccessed": 1775699389156,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
