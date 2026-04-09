@@ -44,39 +44,43 @@ REVIEW_STATS_TYPE = MapType(
 # ==========================================
 
 SILVER_SCHEMA = Schema(
-    NestedField(1,  "category_id",             StringType(),      required=False),
-    NestedField(2,  "product_id",              StringType(),      required=True),
-    NestedField(3,  "product_brand",           StringType(),      required=False),
-    NestedField(4,  "product_name",            StringType(),      required=False),
-    NestedField(5,  "product_name_raw",        StringType(),      required=False),
-    NestedField(6,  "product_ingredients",
+    NestedField(1,  "category",                StringType(),      required=False),
+    NestedField(2,  "main_category",           StringType(),      required=False),
+    NestedField(3,  "sub_category",            StringType(),      required=False),
+    NestedField(4,  "product_id",              StringType(),      required=True),
+    NestedField(5,  "product_brand",           StringType(),      required=False),
+    NestedField(6,  "product_name",            StringType(),      required=False),
+    NestedField(7,  "product_name_raw",        StringType(),      required=False),
+    NestedField(8,  "product_ingredients",
         ListType(element_id=100, element_type=StringType(), element_required=False),
         required=False,
     ),
-    NestedField(7,  "product_ingredients_raw", StringType(),      required=False),
-    NestedField(8,  "rating",                  FloatType(),       required=False),
-    NestedField(9,  "review_count",            IntegerType(),     required=False),
-    NestedField(10, "review_stats",            REVIEW_STATS_TYPE, required=False),
-    NestedField(11, "product_url",             StringType(),      required=False),
-    NestedField(12, "crawled_at",              TimestamptzType(), required=False),
-    NestedField(13, "batch_job",               StringType(),      required=False),
-    NestedField(14, "batch_date",              TimestamptzType(), required=False),
+    NestedField(9,  "product_ingredients_raw", StringType(),      required=False),
+    NestedField(10, "rating",                  FloatType(),       required=False),
+    NestedField(11, "review_count",            IntegerType(),     required=False),
+    NestedField(12, "review_stats",            REVIEW_STATS_TYPE, required=False),
+    NestedField(13, "product_url",             StringType(),      required=False),
+    NestedField(14, "crawled_at",              TimestamptzType(), required=False),
+    NestedField(15, "batch_job",               StringType(),      required=False),
+    NestedField(16, "batch_date",              TimestamptzType(), required=False),
 )
 
 # DLQ 패턴: 에러 원인 추적에 필요한 컬럼만 유지
 SILVER_ERROR_SCHEMA = Schema(
-    NestedField(1,  "category_id",             StringType(),      required=False),
-    NestedField(2,  "product_id",              StringType(),      required=True),
-    NestedField(3,  "product_brand",           StringType(),      required=False),
-    NestedField(4,  "product_name_raw",        StringType(),      required=False),
-    NestedField(5,  "product_name",            StringType(),      required=False),
-    NestedField(6,  "product_ingredients_raw", StringType(),      required=False),
-    NestedField(7,  "product_url",             StringType(),      required=False),
-    NestedField(8,  "crawled_at",              TimestamptzType(), required=False),
-    NestedField(9,  "error_type",              StringType(),      required=False),
-    NestedField(10, "residual_text",           StringType(),      required=False),
-    NestedField(11, "batch_job",               StringType(),      required=False),
-    NestedField(12, "batch_date",              TimestamptzType(), required=False),
+    NestedField(1,  "category",                StringType(),      required=False),
+    NestedField(2,  "main_category",           StringType(),      required=False),
+    NestedField(3,  "sub_category",            StringType(),      required=False),
+    NestedField(4,  "product_id",              StringType(),      required=True),
+    NestedField(5,  "product_brand",           StringType(),      required=False),
+    NestedField(6,  "product_name_raw",        StringType(),      required=False),
+    NestedField(7,  "product_name",            StringType(),      required=False),
+    NestedField(8,  "product_ingredients_raw", StringType(),      required=False),
+    NestedField(9,  "product_url",             StringType(),      required=False),
+    NestedField(10, "crawled_at",              TimestamptzType(), required=False),
+    NestedField(11, "error_type",              StringType(),      required=False),
+    NestedField(12, "residual_text",           StringType(),      required=False),
+    NestedField(13, "batch_job",               StringType(),      required=False),
+    NestedField(14, "batch_date",              TimestamptzType(), required=False),
 )
 
 
@@ -84,18 +88,18 @@ SILVER_ERROR_SCHEMA = Schema(
 # 파티션 / 정렬 설정
 # ==========================================
 
-# silver: category_id 파티셔닝 (카테고리별 조회 최적화)
+# silver: category 파티셔닝
 SILVER_PARTITION = PartitionSpec(
     PartitionField(
         source_id=1, field_id=1000,
-        transform=IdentityTransform(), name="category_id",
+        transform=IdentityTransform(), name="category",
     )
 )
 
-# silver_error: error_type 파티셔닝 (에러 유형별 재처리 최적화)
+# silver_error: error_type 파티셔닝
 SILVER_ERROR_PARTITION = PartitionSpec(
     PartitionField(
-        source_id=9, field_id=1000,
+        source_id=11, field_id=1000,
         transform=IdentityTransform(), name="error_type",
     )
 )
@@ -103,7 +107,7 @@ SILVER_ERROR_PARTITION = PartitionSpec(
 # silver: crawled_at 오름차순 정렬
 SILVER_SORT_ORDER = SortOrder(
     SortField(
-        source_id=12, transform=IdentityTransform(),
+        source_id=14, transform=IdentityTransform(),
         direction=SortDirection.ASC, null_order=NullOrder.NULLS_LAST,
     )
 )
