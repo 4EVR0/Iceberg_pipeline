@@ -105,15 +105,15 @@ _TYPO_RE_BOUNDARY = r'(?<![가-힣a-zA-Z0-9\-./]){raw}(?![가-힣a-zA-Z0-9\-./])
 
 # 후보 목록은 specificity 높은 순서로 정렬
 # (더 구체적인 것 먼저 매칭해야 "올인원세럼" 같은 복합명 오분류 방지)
-_SKINCARE_TONER_RULES    = {"default": None,  "candidates": ["토너", "스킨"]}
-_SKINCARE_ESSENCE_RULES  = {"default": None,  "candidates": ["세럼", "앰플", "에센스"]}
+_SKINCARE_TONER_RULES    = {"default": "토너",  "candidates": []}
+_SKINCARE_ESSENCE_RULES  = {"default": None,  "candidates": ["세럼", "앰플", "에센스"], "fallback": "에센스"}
 _SKINCARE_CREAM_RULES    = {"default": "크림", "candidates": []}
-_SKINCARE_LOTION_RULES   = {"default": None,  "candidates": ["올인원", "로션"]}
-_SKINCARE_MISTOIL_RULES  = {"default": None,  "candidates": ["픽서", "페이스오일", "미스트"]}
+_SKINCARE_LOTION_RULES   = {"default": None,  "candidates": ["올인원", "로션"],         "fallback": "로션"}
+_SKINCARE_MISTOIL_RULES  = {"default": None,  "candidates": ["미스트", "페이스오일"],   "fallback": "페이스오일"}
 
-_CLEANSING_FOAMGEL_RULES = {"default": None,         "candidates": ["클렌징젤", "클렌징폼"]}
-_CLEANSING_OILBALM_RULES = {"default": None,         "candidates": ["클렌징밤", "클렌징오일"]}
-_CLEANSING_WATMILK_RULES = {"default": None,         "candidates": ["클렌징밀크", "클렌징워터"]}
+_CLEANSING_FOAMGEL_RULES = {"default": None,         "candidates": ["클렌징젤", "클렌징폼"],   "fallback": "클렌징폼"}
+_CLEANSING_OILBALM_RULES = {"default": None,         "candidates": ["클렌징밤", "클렌징오일"], "fallback": "클렌징오일"}
+_CLEANSING_WATMILK_RULES = {"default": None,         "candidates": ["클렌징밀크", "클렌징워터"],"fallback": "클렌징워터"}
 _CLEANSING_PEEL_RULES    = {"default": "필링스크럽", "candidates": []}
 
 # (main_category, sub_category) → 룰
@@ -129,22 +129,28 @@ _SUBCAT_RULES: dict[tuple[str, str], dict] = {
     ("클렌징",       "필링&스크럽"):      _CLEANSING_PEEL_RULES,
     # 더모 코스메틱 — sub_category가 뭉쳐있어서 전체 후보 포함
     # fallback은 각각 에센스 / 클렌징폼 (가장 범용적)
-    ("더모 코스메틱", "스킨케어"):        {"default": None, "candidates": ["세럼", "앰플", "크림", "로션", "올인원", "픽서", "페이스오일", "미스트", "토너", "스킨", "에센스"]},
-    ("더모 코스메틱", "클렌징"):          {"default": None, "candidates": ["클렌징젤", "클렌징오일", "클렌징밤", "클렌징워터", "클렌징밀크", "필링스크럽", "클렌징폼"]},
+    ("더모 코스메틱", "스킨케어"): {
+        "default": None,
+        "candidates": ["에센스", "세럼", "앰플", "크림", "로션", "올인원", "토너", "페이스오일", "미스트"],
+        "fallback": "에센스",
+    },
+    ("더모 코스메틱", "클렌징"): {
+        "default": None,
+        "candidates": ["클렌징젤", "클렌징오일", "클렌징밤", "클렌징워터", "클렌징밀크", "필링스크럽", "클렌징폼"],
+        "fallback": "클렌징폼",
+    },
 }
-
+ 
 _CATEGORY_KEYWORDS: dict[str, re.Pattern] = {
-    "토너":       re.compile(r'토너|토닉|toner', re.I),
-    "스킨":       re.compile(r'스킨(?!케어)|skin(?!care)', re.I),
-    "앰플":       re.compile(r'앰플|ampoule', re.I),
-    "세럼":       re.compile(r'세럼|serum|부스터|샷(?!건)', re.I),
+    "토너":       re.compile(r'토너|토닉|toner|스킨(?!케어)|skin(?!care)', re.I),
+    "앰플":       re.compile(r'앰플|원액|스팟|ampoule', re.I),
+    "세럼":       re.compile(r'세럼|serum|부스터|샷(?!건)|젤|겔', re.I),
     "에센스":     re.compile(r'에센스|essence', re.I),
     "크림":       re.compile(r'크림|cream', re.I),
     "올인원":     re.compile(r'올인원|all.?in.?one|멀티크림|멀티밤', re.I),
     "로션":       re.compile(r'로션|에멀전|유액|lotion|emulsion', re.I),
-    "픽서":       re.compile(r'픽서|픽싱|세팅|fixer|setting', re.I),
-    "페이스오일":  re.compile(r'페이스\s*오일|페이셜\s*오일|face\s*oil|드라이\s*오일', re.I),
-    "미스트":     re.compile(r'미스트|mist', re.I),
+    "페이스오일":  re.compile(r'오일|아로마틱 케어|oil', re.I),
+    "미스트":     re.compile(r'미스트|스프레이|하이드롤라|워터|에센스|오떼르말|오 떼르말|mist|픽서|픽싱|세팅|fixer|setting', re.I),
     "클렌징젤":   re.compile(r'젤|gel', re.I),
     "클렌징폼":   re.compile(r'폼|foam', re.I),
     "클렌징밤":   re.compile(r'밤(?!\s*크림)|발름|balm', re.I),
@@ -153,45 +159,59 @@ _CATEGORY_KEYWORDS: dict[str, re.Pattern] = {
     "클렌징워터":  re.compile(r'워터|water|미셀라|micellar', re.I),
     "필링스크럽":  re.compile(r'필링|스크럽|peeling|scrub', re.I),
 }
-
-
-def infer_category(product_name: str, main_category: str, sub_category: str) -> str:
+ 
+ 
+def infer_category(
+    product_name: str,
+    main_category: str,
+    sub_category: str,
+    product_name_raw: str = "",
+) -> str:
     """
     (main_category, sub_category) → 후보 목록 → 제품명 키워드 매칭 → category 반환.
-
+ 
     매칭 순서:
         1. (main_category, sub_category)로 룰 조회
         2. 단일 확정(candidates 없음)이면 default 바로 반환
-        3. candidates 순서대로 키워드 매칭 시도
-        4. 미매칭 → candidates[-1] fallback
-        5. 룰 자체가 없으면 "기타"
-
+        3. clean_product_name 기준 키워드 매칭
+        4. 미매칭 시 product_name_raw로 2차 매칭
+           (괄호 안 키워드 활용 — 예: "[보습오일] 스쿠알란" → 페이스오일)
+        5. 둘 다 미매칭 → candidates[-1] fallback
+        6. 룰 자체가 없으면 "기타"
+ 
     Args:
-        product_name:  정제된 제품명 (clean_product_name)
-        main_category: 크롤링 원본 main_category
-        sub_category:  크롤링 원본 sub_category
-
+        product_name:     정제된 제품명 (clean_product_name)
+        main_category:    크롤링 원본 main_category
+        sub_category:     크롤링 원본 sub_category
+        product_name_raw: 크롤링 원본 제품명 (2차 탐색용, 기본값 "")
+ 
     Returns:
         str: category 값 (예: "세럼", "클렌징폼", "기타")
     """
     rule = _SUBCAT_RULES.get((main_category, sub_category))
     if rule is None:
         return "기타"
-
+ 
     # 단일 확정
     if rule["default"] and not rule["candidates"]:
         return rule["default"]
-
-    # 키워드 매칭 (candidates는 specificity 높은 순)
+ 
+    # 1차: clean_product_name 키워드 매칭
     for candidate in rule["candidates"]:
         pattern = _CATEGORY_KEYWORDS.get(candidate)
         if pattern and pattern.search(product_name):
             return candidate
-
+ 
+    # 2차: product_name_raw 키워드 매칭 (괄호 포함 원본)
+    if product_name_raw:
+        for candidate in rule["candidates"]:
+            pattern = _CATEGORY_KEYWORDS.get(candidate)
+            if pattern and pattern.search(product_name_raw):
+                return candidate
+ 
     # fallback: 후보 중 마지막 (가장 범용적인 것을 마지막에 배치)
-    return rule["candidates"][-1] if rule["candidates"] else "기타"
-
-
+    return rule.get("fallback") or (rule["candidates"][-1] if rule["candidates"] else "기타")
+ 
 
 # ==========================================
 # 내부 헬퍼
@@ -465,7 +485,7 @@ def _clean_rows(
         text = REGEX_BRACKET.sub('', text)
 
         # [Step 9] category 추론
-        category = infer_category(clean_product_name, main_category, sub_category)
+        category = infer_category(clean_product_name, main_category, sub_category, product_name_raw)
 
         interim_list.append({
             'product_id':              product_id,
