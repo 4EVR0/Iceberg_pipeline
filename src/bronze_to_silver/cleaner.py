@@ -131,7 +131,7 @@ _SUBCAT_RULES: dict[tuple[str, str], dict] = {
     # fallback은 각각 에센스 / 클렌징폼 (가장 범용적)
     ("더모 코스메틱", "스킨케어"): {
         "default": None,
-        "candidates": ["에센스", "세럼", "앰플", "크림", "로션", "올인원", "토너", "페이스오일", "미스트"],
+        "candidates": ["세럼", "앰플", "크림", "로션", "올인원", "토너", "에센스", "페이스오일", "미스트"],
         "fallback": "에센스",
     },
     ("더모 코스메틱", "클렌징"): {
@@ -140,23 +140,23 @@ _SUBCAT_RULES: dict[tuple[str, str], dict] = {
         "fallback": "클렌징폼",
     },
 }
- 
+
 _CATEGORY_KEYWORDS: dict[str, re.Pattern] = {
-    "토너":       re.compile(r'토너|토닉|toner|스킨(?!케어)|skin(?!care)', re.I),
+    "토너":       re.compile(r'토너|(?<![가-힣a-zA-Z0-9])토닉(?![가-힣a-zA-Z0-9])|toner|(?<![가-힣a-zA-Z0-9])스킨(?!케어|[가-힣a-zA-Z0-9])|skin(?!care)|패드|pad|소프너', re.I),
     "앰플":       re.compile(r'앰플|원액|스팟|ampoule', re.I),
-    "세럼":       re.compile(r'세럼|serum|부스터|샷(?!건)|젤|겔', re.I),
+    "세럼":       re.compile(r'세럼|serum|부스터|샷(?!건)|(?<![가-힣a-zA-Z])젤(?![가-힣a-zA-Z])|(?<![가-힣a-zA-Z])겔(?![가-힣a-zA-Z])', re.I),
     "에센스":     re.compile(r'에센스|essence', re.I),
     "크림":       re.compile(r'크림|cream', re.I),
     "올인원":     re.compile(r'올인원|all.?in.?one|멀티크림|멀티밤', re.I),
-    "로션":       re.compile(r'로션|에멀전|유액|lotion|emulsion', re.I),
+    "로션":       re.compile(r'로션|에멀전|에멀젼|유액|lotion|emulsion|모이스처라이저|moisturizer|플루이드|fluid|밀크(?!클렌)', re.I),
     "페이스오일":  re.compile(r'오일|아로마틱 케어|oil', re.I),
     "미스트":     re.compile(r'미스트|스프레이|하이드롤라|워터|에센스|오떼르말|오 떼르말|mist|픽서|픽싱|세팅|fixer|setting', re.I),
     "클렌징젤":   re.compile(r'젤|gel', re.I),
-    "클렌징폼":   re.compile(r'폼|foam', re.I),
+    "클렌징폼":  re.compile(r'폼|foam|워시|wash|비누|솝|soap|바|bar|버블|bubble|무스|mousse|휩|whip|클렌저|클렌져', re.I),
     "클렌징밤":   re.compile(r'밤(?!\s*크림)|발름|balm', re.I),
     "클렌징오일":  re.compile(r'오일|oil', re.I),
-    "클렌징밀크":  re.compile(r'밀크|milk|크림\s*클렌|로션\s*클렌', re.I),
-    "클렌징워터":  re.compile(r'워터|water|미셀라|micellar', re.I),
+    "클렌징밀크":  re.compile(r'밀크|milk|크림\s*클렌|로션\s*클렌|클렌징\s*로션', re.I),
+    "클렌징워터":  re.compile(r'워터|water|미셀라|micellar|리무버|remover|H2O', re.I),
     "필링스크럽":  re.compile(r'필링|스크럽|peeling|scrub', re.I),
 }
  
