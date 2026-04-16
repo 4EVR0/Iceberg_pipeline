@@ -42,6 +42,10 @@ class S3:
     # 처리 결과 CSV 저장 (조회용)
     DATA_CSV_PATH = f"s3://{BUCKET}/data_csv/"
 
+    # Reference Data (typo_map, garbage_keywords)
+    REFERENCE_TYPO_MAP_PATH         = f"s3://{BUCKET}/reference/typo_map/"
+    REFERENCE_GARBAGE_KEYWORDS_PATH = f"s3://{BUCKET}/reference/garbage_keywords/"
+
 
 # ==========================================
 # Glue Catalog / Iceberg 설정
@@ -55,6 +59,8 @@ class Iceberg:
     CATEGORY_MASTER_TABLE              = f"{DATABASE}.oliveyoung_category_master"
     GOLD_INGREDIENT_FREQUENCY_TABLE    = f"{DATABASE}.gold_ingredient_frequency"
     GOLD_PRODUCT_CHANGE_LOG_TABLE      = f"{DATABASE}.gold_product_change_log"
+    TYPO_MAP_TABLE                     = f"{DATABASE}.typo_map"
+    GARBAGE_KEYWORDS_TABLE             = f"{DATABASE}.garbage_keywords"
 
     @staticmethod
     def get_catalog():

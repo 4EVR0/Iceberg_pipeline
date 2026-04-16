@@ -8,8 +8,8 @@ from config.settings import Iceberg, DataPath, DuckDB
 from models.pipeline_models import Dictionaries
 from src.bronze_to_silver.ac_builder import (
     load_kcia_mapping_dict,
-    load_typo_maps,
-    load_garbage_config,
+    load_typo_maps_from_iceberg,
+    load_garbage_config_from_iceberg,
     build_ahocorasick,
 )
 from src.bronze_to_silver.cleaner import process_pipeline
@@ -48,6 +48,8 @@ def load_dictionaries(con) -> Dictionaries:
     """
     KCIA 사전, 유의어/오타 사전, garbage 설정, Aho-Corasick 오토마타를 준비합니다.
     """
+    catalog = Iceberg.get_catalog()
+
     print("4. KCIA 성분 사전 준비...")
     kcia_csv_path = DuckDB.get_latest_kcia_s3_path(con)
     kcia_dict = load_kcia_mapping_dict(
@@ -57,13 +59,10 @@ def load_dictionaries(con) -> Dictionaries:
     print(f"   {len(kcia_dict)}개 키워드 로드됨\n")
 
     print("5. 유의어/오타 사전 로드...")
-    typo_list, typo_regex_list = load_typo_maps(
-        typo_map_path       = DataPath.TYPO_MAP_JSON,
-        typo_map_regex_path = DataPath.TYPO_MAP_REGEX_JSON,
-    )
+    typo_list, typo_regex_list = load_typo_maps_from_iceberg(catalog)
 
     print("\n6. garbage 키워드 설정 로드...")
-    garbage_config = load_garbage_config(DataPath.GARBAGE_KEYWORDS_JSON)
+    garbage_config = load_garbage_config_from_iceberg(catalog)
 
     print("\n7. Aho-Corasick 빌드...")
     ac_automaton = build_ahocorasick(kcia_dict)

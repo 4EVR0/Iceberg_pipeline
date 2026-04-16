@@ -12,6 +12,8 @@ import json
 import pandas as pd
 import ahocorasick
 
+from config.settings import Iceberg
+
 
 # ==========================================
 # 1. KCIA 매핑 딕셔너리 생성
@@ -138,67 +140,61 @@ def load_kcia_mapping_dict(
 
 
 # ==========================================
-# 2. 유의어/오타 사전 로드
+# 2. Reference Data Iceberg 로드
 # ==========================================
 
-def load_typo_maps(
-    typo_map_path: str,
-    typo_map_regex_path: str,
-) -> tuple[list[dict], list[dict]]:
+
+# ==========================================
+# 3. Reference Data Iceberg 로드
+# ==========================================
+
+def load_typo_maps_from_iceberg(catalog) -> tuple[list[dict], list[dict]]:
     """
-    typo_map.json과 typo_map_regex.json을 로드합니다.
-    파일이 없으면 빈 리스트를 반환합니다.
+    Iceberg typo_map 테이블에서 오타/유의어 사전을 로드합니다.
 
-    두 파일 모두 raw 길이 내림차순으로 정렬되어 저장되어 있어야 합니다.
-    (긴 raw부터 치환해야 부분집합 오염을 방지할 수 있습니다.)
-
-    Args:
-        typo_map_path:       typo_map.json 경로 (list[{"raw", "fix"}])
-        typo_map_regex_path: typo_map_regex.json 경로 (list[{"raw", "fix", "pattern"}])
+    정렬 기준: raw 길이 내림차순 (긴 raw부터 치환해야 부분집합 오염 방지)
 
     Returns:
         (typo_list, typo_regex_list)
-            typo_list:       단순 치환용 리스트
-            typo_regex_list: 정규식 치환용 리스트 (pattern 필드 포함)
+            typo_list:       match_type='simple'         → list[{"raw", "fix"}]
+            typo_regex_list: match_type='regex_boundary' → list[{"raw", "fix"}]
     """
-    def _load(path: str, label: str) -> list[dict]:
-        if not os.path.exists(path):
-            print(f"   {label} 없음 (건너뜀): {path}")
-            return []
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        print(f"   {label} 로드: {len(data)}개 항목")
-        return data
+    table = catalog.load_table(Iceberg.TYPO_MAP_TABLE)
+    df = table.scan().to_arrow().to_pandas()
+    df = (
+        df.assign(_raw_len=df["raw"].str.len())
+          .sort_values("_raw_len", ascending=False)
+          .drop(columns=["_raw_len", "synced_at"], errors="ignore")
+    )
 
-    typo_list       = _load(typo_map_path,       "typo_map")
-    typo_regex_list = _load(typo_map_regex_path, "typo_map_regex")
+    typo_list       = df[df["match_type"] == "simple"][["raw", "fix"]].to_dict("records")
+    typo_regex_list = df[df["match_type"] == "regex_boundary"][["raw", "fix"]].to_dict("records")
+
+    print(f"   typo_map 로드: simple={len(typo_list)}, regex_boundary={len(typo_regex_list)}개 항목")
     return typo_list, typo_regex_list
 
 
-def load_garbage_config(json_path: str) -> dict:
+def load_garbage_config_from_iceberg(catalog) -> dict:
     """
-    garbage_keywords.json을 로드합니다.
-    파일이 없으면 빈 딕셔너리를 반환합니다.
-
-    Args:
-        json_path: garbage_keywords.json 경로
+    Iceberg garbage_keywords 테이블에서 가비지 필터링 설정을 로드합니다.
 
     Returns:
         dict: {"exact": [...], "contains": [...]}
     """
-    if not os.path.exists(json_path):
-        print(f"   garbage_keywords 없음 (건너뜀): {json_path}")
-        return {}
-    with open(json_path, 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    exact_n    = len(config.get("exact", []))
-    contains_n = len(config.get("contains", []))
-    print(f"   garbage_keywords 로드: exact={exact_n}, contains={contains_n}")
+    table = catalog.load_table(Iceberg.GARBAGE_KEYWORDS_TABLE)
+    df = table.scan().to_arrow().to_pandas()
+
+    config = {
+        "exact":    df[df["match_type"] == "exact"]["keyword"].tolist(),
+        "contains": df[df["match_type"] == "contains"]["keyword"].tolist(),
+    }
+
+    print(f"   garbage_keywords 로드: exact={len(config['exact'])}, contains={len(config['contains'])}")
     return config
 
 
 # ==========================================
-# 3. Aho-Corasick 오토마타 빌드 및 탐색
+# 4. Aho-Corasick 오토마타 빌드 및 탐색
 # ==========================================
 
 def build_ahocorasick(mapping_dict: dict) -> ahocorasick.Automaton:
