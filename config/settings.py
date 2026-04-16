@@ -25,7 +25,7 @@ class S3:
 
     # KCIA: INCI_data_silver/kcia_cosing/batch=YYYY-MM/kcia_cosing_matched_final.csv
     KCIA_PREFIX       = "INCI_data_silver/kcia_cosing"
-    KCIA_GLOB_PATTERN = f"s3://{BUCKET}/{KCIA_PREFIX}/batch=*/kcia_cosing_matched_final.csv"
+    KCIA_GLOB_PATTERN = f"s3://{BUCKET}/{KCIA_PREFIX}/batch=*/kcia_cosing_graphrag_map.csv"
 
     # Silver
     SILVER_CURRENT_PATH  = f"s3://{BUCKET}/silver/current/"
