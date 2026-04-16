@@ -81,11 +81,11 @@ REGEX_PRODUCT_VOLUME_ANCHOR = re.compile(
 )
 REGEX_PRODUCT_MARKETING = re.compile(
     r'기획|증정|단독|1\+1|본품|추가|대용량|세트|듀오|트리플|한정|리필팩|리필|단품|구성'
-    r'|트래블\s*키트|캡슐\s*키트'
+    r'|트래블\s*키트|캡슐\s*키트|스틱포'
     r'|더블\s*(기획|세트|구성|\d+입|\d+\s*(ml|g|㎖))',
     re.IGNORECASE
 )
-REGEX_PRODUCT_TAIL_SYMBOLS = re.compile(r'[\s+*/\-.,]+$|(?<=\s)[+*/\-,.]+(?=\s|$)')
+REGEX_PRODUCT_TAIL_SYMBOLS = re.compile(r'[\s*/\-.,]+$|(?<=\s)[*/\-,.]+(?=\s|$)')
 REGEX_MULTI_SPACE = re.compile(r'\s+')
 
 # 성분명 내 쉼표 마스킹 (영숫자 사이의 쉼표)
@@ -341,11 +341,33 @@ def _apply_typo_maps(
 # 전처리 파이프라인 (내부 단계 함수)
 # ==========================================
 
+def _compile_product_name_norms(
+    norm_list: list[dict],
+) -> list[tuple[re.Pattern, str]]:
+    """
+    product_name_norm_list(Iceberg 로드 결과)를 컴파일된 (패턴, 치환) 튜플로 변환합니다.
+
+    match_type='regex'  → re.compile(raw)
+    match_type='simple' → re.compile(re.escape(raw))
+    """
+    compiled = []
+    for entry in norm_list:
+        raw        = entry["raw"]
+        fix        = entry["fix"]
+        match_type = entry.get("match_type", "regex")
+        if match_type == "simple":
+            compiled.append((re.compile(re.escape(raw)), fix))
+        else:  # "regex"
+            compiled.append((re.compile(raw), fix))
+    return compiled
+
+
 def _clean_rows(
     df: pd.DataFrame,
     typo_list: list[dict],
     typo_regex_list: list[dict],
     garbage_config: dict,
+    product_name_norm_compiled: list[tuple[re.Pattern, str]],
 ) -> tuple[list[dict], list[dict]]:
     """
     Step 1~9: 행별 정제를 수행하여 interim_list와 error_records를 반환합니다.
@@ -440,6 +462,8 @@ def _clean_rows(
         product_name = REGEX_PRODUCT_MARKETING.sub('', product_name)
         product_name = REGEX_PRODUCT_TAIL_SYMBOLS.sub('', product_name)
         clean_product_name = REGEX_MULTI_SPACE.sub(' ', product_name).strip()
+        for _pat, _rep in product_name_norm_compiled:
+            clean_product_name = _pat.sub(_rep, clean_product_name)
         product_id = _make_product_id(brand, clean_product_name)
 
         text = raw_text
@@ -626,6 +650,7 @@ def process_pipeline(
     typo_list: list[dict],
     typo_regex_list: list[dict],
     garbage_config: dict = None,
+    product_name_norm_list: list[dict] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Bronze raw DataFrame을 받아 silver / error DataFrame으로 전처리합니다.
@@ -636,11 +661,12 @@ def process_pipeline(
         Step 11~13 → _match_ingredients()
 
     Args:
-        df:               Bronze raw DataFrame
-        ac_automaton:     빌드된 Aho-Corasick 오토마타
-        typo_list:        typo_map.json 로드 결과 (list[{"raw", "fix"}], 길이 내림차순)
-        typo_regex_list:  typo_map_regex.json 로드 결과 (list[{"raw", "fix", "pattern"}], 길이 내림차순)
-        garbage_config:   garbage_keywords.json 로드 결과 (None이면 garbage 필터 미적용)
+        df:                     Bronze raw DataFrame
+        ac_automaton:           빌드된 Aho-Corasick 오토마타
+        typo_list:              typo_map 로드 결과 (list[{"raw", "fix"}], 길이 내림차순)
+        typo_regex_list:        typo_map_regex 로드 결과 (list[{"raw", "fix"}], 길이 내림차순)
+        garbage_config:         garbage_keywords 로드 결과 (None이면 garbage 필터 미적용)
+        product_name_norm_list: 제품명 정규화 규칙 (list[{"raw", "fix", "match_type"}])
 
     Returns:
         (silver_df, error_df)
@@ -648,9 +674,12 @@ def process_pipeline(
     batch_job  = "oliveyoung_bronze_to_silver_process"
     batch_date = datetime.now(timezone.utc)
 
+    # product_name_norm 패턴 컴파일 (한 번만)
+    norm_compiled = _compile_product_name_norms(product_name_norm_list or [])
+
     # [Step 1~9] 행별 정제
     interim_list, error_records = _clean_rows(
-        df, typo_list, typo_regex_list, garbage_config
+        df, typo_list, typo_regex_list, garbage_config, norm_compiled
     )
 
     if not interim_list:

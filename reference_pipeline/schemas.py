@@ -23,6 +23,7 @@ TYPO_MAP_SCHEMA = Schema(
     NestedField(2, "fix",        StringType(),      required=True),
     NestedField(3, "match_type", StringType(),      required=True),
     NestedField(4, "synced_at",  TimestamptzType(), required=False),
+    NestedField(5, "apply_to",   StringType(),      required=False),
 )
 
 

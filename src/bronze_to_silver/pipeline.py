@@ -9,6 +9,7 @@ from models.pipeline_models import Dictionaries
 from src.bronze_to_silver.ac_builder import (
     load_kcia_mapping_dict,
     load_typo_maps_from_iceberg,
+    load_product_name_norms_from_iceberg,
     load_garbage_config_from_iceberg,
     build_ahocorasick,
 )
@@ -61,18 +62,22 @@ def load_dictionaries(con) -> Dictionaries:
     print("5. 유의어/오타 사전 로드...")
     typo_list, typo_regex_list = load_typo_maps_from_iceberg(catalog)
 
-    print("\n6. garbage 키워드 설정 로드...")
+    print("\n6. 제품명 정규화 규칙 로드...")
+    product_name_norm_list = load_product_name_norms_from_iceberg(catalog)
+
+    print("\n7. garbage 키워드 설정 로드...")
     garbage_config = load_garbage_config_from_iceberg(catalog)
 
-    print("\n7. Aho-Corasick 빌드...")
+    print("\n8. Aho-Corasick 빌드...")
     ac_automaton = build_ahocorasick(kcia_dict)
     print("   빌드 완료\n")
 
     return Dictionaries(
-        ac_automaton    = ac_automaton,
-        typo_list       = typo_list,
-        typo_regex_list = typo_regex_list,
-        garbage_config  = garbage_config,
+        ac_automaton           = ac_automaton,
+        typo_list              = typo_list,
+        typo_regex_list        = typo_regex_list,
+        garbage_config         = garbage_config,
+        product_name_norm_list = product_name_norm_list,
     )
 
 
@@ -86,20 +91,21 @@ def run_pipeline():
     raw_df = load_bronze_data(con)
     dicts  = load_dictionaries(con)
 
-    print("8. 전처리 파이프라인 실행...")
+    print("9. 전처리 파이프라인 실행...")
     silver_df, error_df = process_pipeline(
-        df              = raw_df,
-        ac_automaton    = dicts.ac_automaton,
-        typo_list       = dicts.typo_list,
-        typo_regex_list = dicts.typo_regex_list,
-        garbage_config  = dicts.garbage_config,
+        df                     = raw_df,
+        ac_automaton           = dicts.ac_automaton,
+        typo_list              = dicts.typo_list,
+        typo_regex_list        = dicts.typo_regex_list,
+        garbage_config         = dicts.garbage_config,
+        product_name_norm_list = dicts.product_name_norm_list,
     )
     print(f"   정상: {len(silver_df)}건 / 에러: {len(error_df)}건\n")
 
-    print("9. Iceberg write...")
+    print("10. Iceberg write...")
     write_to_iceberg(silver_df, error_df)
 
-    print("\n10. CSV 저장 (s3 data_csv/)...")
+    print("\n11. CSV 저장 (s3 data_csv/)...")
     write_csv_to_s3(silver_df, error_df)
 
     print("\n=== 완료 ===")

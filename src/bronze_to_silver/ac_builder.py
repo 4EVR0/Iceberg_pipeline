@@ -150,7 +150,8 @@ def load_kcia_mapping_dict(
 
 def load_typo_maps_from_iceberg(catalog) -> tuple[list[dict], list[dict]]:
     """
-    Iceberg typo_map 테이블에서 오타/유의어 사전을 로드합니다.
+    Iceberg typo_map 테이블에서 성분명 오타/유의어 사전을 로드합니다.
+    apply_to='ingredient' 행만 대상으로 합니다.
 
     정렬 기준: raw 길이 내림차순 (긴 raw부터 치환해야 부분집합 오염 방지)
 
@@ -161,10 +162,15 @@ def load_typo_maps_from_iceberg(catalog) -> tuple[list[dict], list[dict]]:
     """
     table = catalog.load_table(Iceberg.TYPO_MAP_TABLE)
     df = table.scan().to_arrow().to_pandas()
+
+    # apply_to 컬럼이 있으면 ingredient 행만, 없으면 전체(하위 호환)
+    if "apply_to" in df.columns:
+        df = df[df["apply_to"].isin(["ingredient", None]) | df["apply_to"].isna()]
+
     df = (
         df.assign(_raw_len=df["raw"].str.len())
           .sort_values("_raw_len", ascending=False)
-          .drop(columns=["_raw_len", "synced_at"], errors="ignore")
+          .drop(columns=["_raw_len", "synced_at", "apply_to"], errors="ignore")
     )
 
     typo_list       = df[df["match_type"] == "simple"][["raw", "fix"]].to_dict("records")
@@ -172,6 +178,31 @@ def load_typo_maps_from_iceberg(catalog) -> tuple[list[dict], list[dict]]:
 
     print(f"   typo_map 로드: simple={len(typo_list)}, regex_boundary={len(typo_regex_list)}개 항목")
     return typo_list, typo_regex_list
+
+
+def load_product_name_norms_from_iceberg(catalog) -> list[dict]:
+    """
+    Iceberg typo_map 테이블에서 제품명 표기 정규화 규칙을 로드합니다.
+    apply_to='product_name' 행만 대상으로 합니다.
+
+    Returns:
+        list[{"raw", "fix", "match_type"}]
+            match_type='regex'  → re.compile(raw).sub(fix, text)
+            match_type='simple' → text.replace(raw, fix)
+    """
+    table = catalog.load_table(Iceberg.TYPO_MAP_TABLE)
+    df = table.scan().to_arrow().to_pandas()
+
+    if "apply_to" not in df.columns:
+        print("   product_name_norm: apply_to 컬럼 없음 — 빈 목록 반환")
+        return []
+
+    df = df[df["apply_to"] == "product_name"][["raw", "fix", "match_type"]]
+    norm_list = df.to_dict("records")
+
+    print(f"   product_name_norm 로드: {len(norm_list)}개 항목")
+    return norm_list
+
 
 
 def load_garbage_config_from_iceberg(catalog) -> dict:

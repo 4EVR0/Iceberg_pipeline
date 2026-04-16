@@ -1,0 +1,28 @@
+[
+  {"raw": "오\\s+떼르말",   "fix": "오떼르말",      "match_type": "regex"},
+
+  {"raw": "클렌징\\s+오일", "fix": "클렌징오일",    "match_type": "regex"},
+  {"raw": "클렌징\\s+폼",   "fix": "클렌징폼",      "match_type": "regex"},
+  {"raw": "클렌징\\s+밀크", "fix": "클렌징밀크",    "match_type": "regex"},
+  {"raw": "클렌징\\s+밤",   "fix": "클렌징밤",      "match_type": "regex"},
+  {"raw": "클렌징\\s+젤",   "fix": "클렌징젤",      "match_type": "regex"},
+  {"raw": "클렌징\\s+워터", "fix": "클렌징워터",    "match_type": "regex"},
+  {"raw": "딥\\s+클렌징",   "fix": "딥클렌징",      "match_type": "regex"},
+  {"raw": "폼\\s+클렌저",   "fix": "폼클렌저",      "match_type": "regex"},
+  {"raw": "팩\\s+클렌저",   "fix": "팩클렌저",      "match_type": "regex"},
+  {"raw": "파우더\\s+워시", "fix": "파우더워시",    "match_type": "regex"},
+  {"raw": "필링\\s+젤",     "fix": "필링젤",        "match_type": "regex"},
+
+  {"raw": "나이트\\s+크림", "fix": "나이트크림",    "match_type": "regex"},
+  {"raw": "수분\\s+크림",   "fix": "수분크림",      "match_type": "regex"},
+  {"raw": "수딩\\s+크림",   "fix": "수딩크림",      "match_type": "regex"},
+  {"raw": "젤\\s+크림",     "fix": "젤크림",        "match_type": "regex"},
+  {"raw": "크림\\s+미스트", "fix": "크림미스트",    "match_type": "regex"},
+  {"raw": "크림\\s+스킨",   "fix": "크림스킨",      "match_type": "regex"},
+  
+  {"raw": "더마힐러",      "fix": "더마 힐러",     "match_type": "simple"},
+  {"raw": "타임레볼루션",   "fix": "타임 레볼루션", "match_type": "simple"},
+  {"raw": "슈퍼드랍스",     "fix": "슈퍼 드랍스",   "match_type": "simple"},
+  {"raw": "유스래스팅",     "fix": "유스 래스팅",   "match_type": "simple"},
+  {"raw": "온리포맨",       "fix": "온리 포맨",     "match_type": "simple"}
+]

@@ -6,15 +6,12 @@ Iceberg 테이블에 전체 overwrite로 반영됩니다.
 
 실행:
     cd Iceberg_pipeline
-    python reference_pipeline/sync_reference_data.py            # 전체 sync
-    python reference_pipeline/sync_reference_data.py --typo     # typo_map만
-    python reference_pipeline/sync_reference_data.py --garbage  # garbage_keywords만
+    python reference_pipeline/sync_reference_data.py
 """
 
 import sys
 import os
 import json
-import argparse
 from datetime import datetime, timezone
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,8 +19,8 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 import pyarrow as pa
-
 from config.settings import DataPath, Iceberg
+
 
 
 # ==========================================
@@ -47,30 +44,44 @@ def _to_arrow(table, df_dict: dict) -> pa.Table:
 
 def sync_typo_map(catalog) -> None:
     """
-    typo_map.json + typo_map_regex.json → Iceberg typo_map 테이블 overwrite
+    typo_map.json + typo_map_regex.json + product_name_norm_map.json
+    → Iceberg typo_map 테이블 전체 overwrite
 
-    match_type:
+    apply_to='ingredient':
         'simple'         → typo_map.json       (단순 str.replace)
         'regex_boundary' → typo_map_regex.json (경계 패턴 정규식)
+    apply_to='product_name':
+        'regex'          → product_name_norm_map.json (경계 없는 정규식)
+        'simple'         → product_name_norm_map.json (단순 str.replace)
     """
     simple_entries = _load_json(DataPath.TYPO_MAP_JSON)
     regex_entries  = _load_json(DataPath.TYPO_MAP_REGEX_JSON)
+    norm_entries   = _load_json(DataPath.PRODUCT_NAME_NORM_MAP_JSON)
 
     synced_at = datetime.now(timezone.utc)
 
     raws        = []
     fixes       = []
     match_types = []
+    apply_tos   = []
 
     for e in simple_entries:
         raws.append(e["raw"])
         fixes.append(e["fix"])
         match_types.append("simple")
+        apply_tos.append("ingredient")
 
     for e in regex_entries:
         raws.append(e["raw"])
         fixes.append(e["fix"])
         match_types.append("regex_boundary")
+        apply_tos.append("ingredient")
+
+    for e in norm_entries:
+        raws.append(e["raw"])
+        fixes.append(e["fix"])
+        match_types.append(e["match_type"])
+        apply_tos.append("product_name")
 
     synced_ats = [synced_at] * len(raws)
 
@@ -80,11 +91,14 @@ def sync_typo_map(catalog) -> None:
         "fix":        pa.array(fixes,       type=pa.string()),
         "match_type": pa.array(match_types, type=pa.string()),
         "synced_at":  pa.array(synced_ats,  type=pa.timestamp("us", tz="UTC")),
+        "apply_to":   pa.array(apply_tos,   type=pa.string()),
     })
 
     table.overwrite(arrow_table)
     print(f"   typo_map sync 완료: {len(raws)}건 "
-          f"(simple={len(simple_entries)}, regex_boundary={len(regex_entries)})")
+          f"(ingredient simple={len(simple_entries)}, "
+          f"ingredient regex_boundary={len(regex_entries)}, "
+          f"product_name norm={len(norm_entries)})")
 
 
 def sync_garbage_keywords(catalog) -> None:
@@ -129,25 +143,14 @@ def sync_garbage_keywords(catalog) -> None:
 # ==========================================
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--typo",    action="store_true", help="typo_map만 sync")
-    parser.add_argument("--garbage", action="store_true", help="garbage_keywords만 sync")
-    args = parser.parse_args()
-
-    run_all    = not args.typo and not args.garbage
-    run_typo   = run_all or args.typo
-    run_garbage = run_all or args.garbage
-
     print("=== Reference Data sync ===\n")
 
     catalog = Iceberg.get_catalog()
 
-    if run_typo:
-        print(f"1. {Iceberg.TYPO_MAP_TABLE}")
-        sync_typo_map(catalog)
+    print(f"[typo] {Iceberg.TYPO_MAP_TABLE}")
+    sync_typo_map(catalog)
 
-    if run_garbage:
-        print(f"\n2. {Iceberg.GARBAGE_KEYWORDS_TABLE}")
-        sync_garbage_keywords(catalog)
+    print(f"\n[garbage] {Iceberg.GARBAGE_KEYWORDS_TABLE}")
+    sync_garbage_keywords(catalog)
 
     print("\n=== 완료 ===")

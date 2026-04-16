@@ -6,10 +6,11 @@ import ahocorasick
 
 @dataclass
 class Dictionaries:
-    ac_automaton:    ahocorasick.Automaton
-    typo_list:       list[dict]
-    typo_regex_list: list[dict]
-    garbage_config:  dict
+    ac_automaton:          ahocorasick.Automaton
+    typo_list:             list[dict]
+    typo_regex_list:       list[dict]
+    garbage_config:        dict
+    product_name_norm_list: list[dict]
 
 
 
