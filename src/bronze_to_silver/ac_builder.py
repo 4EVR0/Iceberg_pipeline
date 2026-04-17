@@ -8,7 +8,6 @@ KCIA 성분 사전 빌드 및 Aho-Corasick 오토마타 모듈
 """
 
 import os
-import json
 import pandas as pd
 import ahocorasick
 
@@ -80,64 +79,6 @@ def generate_kcia_mapping_dict(csv_path: str) -> dict:
     return mapping
  
  
-def load_kcia_mapping_dict(
-    csv_path: str,
-    json_cache_path: str,
-) -> dict:
-    """
-    CSV가 있으면 CSV에서 변환해서 사용하고,
-    CSV에 문제가 있으면 JSON 폴백으로 로드합니다.
- 
-    우선순위:
-        1. CSV → generate_kcia_mapping_dict() 로 변환 (성공 시 JSON 캐시도 갱신)
-        2. CSV 실패 → JSON 폴백 (기존 캐시 사용)
-        3. 둘 다 없으면 RuntimeError
- 
-    Args:
-        csv_path:        KCIA 원본 CSV 경로
-        json_cache_path: 폴백 및 캐시 저장 경로
- 
-    Returns:
-        dict: KCIA 매핑 딕셔너리
- 
-    Raises:
-        RuntimeError: CSV와 JSON 모두 사용 불가능한 경우
-    """
-    # 1. CSV 시도
-    is_s3 = csv_path.startswith("s3://")
-    csv_exists = is_s3 or os.path.exists(csv_path)
-
-    if csv_exists:
-        try:
-            print(f"   KCIA 사전 생성 중 (CSV: {csv_path}) ...")
-            mapping = generate_kcia_mapping_dict(csv_path)
-            # 성공 시 JSON 캐시 갱신
-            os.makedirs(os.path.dirname(json_cache_path), exist_ok=True)
-            with open(json_cache_path, 'w', encoding='utf-8') as f:
-                json.dump(mapping, f, ensure_ascii=False, indent=2)
-            print(f"   변환 완료: {len(mapping)}개 키워드 (캐시 갱신: {json_cache_path})")
-            return mapping
-        except Exception as e:
-            print(f"   [WARN] CSV 변환 실패 ({e}) → JSON 폴백 시도")
-    else:
-        print(f"   [WARN] CSV 없음 ({csv_path}) → JSON 폴백 시도")
- 
-    # 2. JSON 폴백
-    if os.path.exists(json_cache_path):
-        print(f"   KCIA 사전 JSON 폴백 로드: {json_cache_path}")
-        with open(json_cache_path, 'r', encoding='utf-8') as f:
-            mapping = json.load(f)
-        print(f"   로드 완료: {len(mapping)}개 키워드")
-        return mapping
- 
-    # 3. 둘 다 없음
-    raise RuntimeError(
-        f"KCIA 사전을 로드할 수 없습니다.\n"
-        f"  CSV : {csv_path}\n"
-        f"  JSON: {json_cache_path}\n"
-        f"둘 중 하나가 반드시 존재해야 합니다."
-    )
-
 
 # ==========================================
 # 2. Reference Data Iceberg 로드

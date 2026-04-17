@@ -80,7 +80,6 @@ class Iceberg:
 class DataPath:
     DATA_DIR              = os.path.join(_BASE_DIR, "data")
     KCIA_CSV              = os.path.join(DATA_DIR, "kcia_ingredient_dict2.csv")
-    KCIA_MAPPING_JSON     = os.path.join(DATA_DIR, "kcia_mapping_dict.json")
     TYPO_MAP_JSON              = os.path.join(DATA_DIR, "typo_map.json")
     TYPO_MAP_REGEX_JSON        = os.path.join(DATA_DIR, "typo_map_regex.json")
     GARBAGE_KEYWORDS_JSON      = os.path.join(DATA_DIR, "garbage_keywords.json")
