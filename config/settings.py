@@ -16,8 +16,8 @@ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Icebe
 # AWS / S3 경로 설정
 # ==========================================
 class S3:
-    REGION = "ap-northeast-2"
-    BUCKET = "oliveyoung-crawl-data"
+    REGION = os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2")
+    BUCKET = os.getenv("S3_BUCKET", "oliveyoung-crawl-data")
 
     # Bronze: s3://.../oliveyoung/main_category/sub_category/run_id=YYYYMMDD_HHMMSS/part_*.json
     BRONZE_PREFIX       = "oliveyoung"
@@ -52,7 +52,7 @@ class S3:
 # ==========================================
 class Iceberg:
     CATALOG_NAME          = "glue"
-    DATABASE              = "oliveyoung_db"
+    DATABASE              = os.getenv("ICEBERG_DATABASE", "oliveyoung_db")
     SILVER_CURRENT_TABLE  = f"{DATABASE}.oliveyoung_silver_current"
     SILVER_HISTORY_TABLE  = f"{DATABASE}.oliveyoung_silver_history"
     SILVER_ERROR_TABLE    = f"{DATABASE}.oliveyoung_silver_error"
