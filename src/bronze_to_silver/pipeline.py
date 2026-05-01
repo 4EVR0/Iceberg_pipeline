@@ -8,6 +8,8 @@ from config.settings import Iceberg, DuckDB
 from models.pipeline_models import Dictionaries
 from src.bronze_to_silver.ac_builder import (
     generate_kcia_mapping_dict,
+    load_custom_ingredient_dict_from_iceberg,
+    apply_custom_ingredient_dict,
     load_typo_maps_from_iceberg,
     load_product_name_norms_from_iceberg,
     load_garbage_config_from_iceberg,
@@ -54,7 +56,10 @@ def load_dictionaries(con) -> Dictionaries:
     print("4. KCIA 성분 사전 준비...")
     kcia_csv_path = DuckDB.get_latest_kcia_s3_path(con)
     kcia_dict = generate_kcia_mapping_dict(kcia_csv_path)
-    print(f"   {len(kcia_dict)}개 키워드 로드됨\n")
+    print(f"   KCIA: {len(kcia_dict)}개 키워드 로드됨")
+    custom_entries = load_custom_ingredient_dict_from_iceberg(catalog)
+    kcia_dict = apply_custom_ingredient_dict(kcia_dict, custom_entries)
+    print(f"   커스텀 적용 후 총 {len(kcia_dict)}개 키워드\n")
 
     print("5. 유의어/오타 사전 로드...")
     typo_list, typo_regex_list = load_typo_maps_from_iceberg(catalog)

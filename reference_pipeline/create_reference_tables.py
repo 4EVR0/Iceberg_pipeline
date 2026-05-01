@@ -21,6 +21,7 @@ from config.settings import S3, Iceberg
 from reference_pipeline.schemas import (
     TYPO_MAP_SCHEMA,
     GARBAGE_KEYWORDS_SCHEMA,
+    CUSTOM_INGREDIENT_DICT_SCHEMA,
     REFERENCE_PARTITION,
     REFERENCE_SORT_ORDER,
 )
@@ -93,6 +94,12 @@ if __name__ == "__main__":
        table_name = Iceberg.GARBAGE_KEYWORDS_TABLE,
        schema     = GARBAGE_KEYWORDS_SCHEMA,
        location   = S3.REFERENCE_GARBAGE_KEYWORDS_PATH)
+
+    print(f"\n3. {Iceberg.CUSTOM_INGREDIENT_DICT_TABLE}")
+    fn(catalog,
+       table_name = Iceberg.CUSTOM_INGREDIENT_DICT_TABLE,
+       schema     = CUSTOM_INGREDIENT_DICT_SCHEMA,
+       location   = S3.REFERENCE_CUSTOM_INGREDIENT_DICT_PATH)
 
     print("\n=== 완료 ===")
     print("\n※ 테이블 생성 후 반드시 sync를 실행하세요:")

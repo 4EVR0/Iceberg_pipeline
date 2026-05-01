@@ -84,11 +84,6 @@ def generate_kcia_mapping_dict(csv_path: str) -> dict:
 # 2. Reference Data Iceberg 로드
 # ==========================================
 
-
-# ==========================================
-# 3. Reference Data Iceberg 로드
-# ==========================================
-
 def load_typo_maps_from_iceberg(catalog) -> tuple[list[dict], list[dict]]:
     """
     Iceberg typo_map 테이블에서 성분명 오타/유의어 사전을 로드합니다.
@@ -144,6 +139,63 @@ def load_product_name_norms_from_iceberg(catalog) -> list[dict]:
     print(f"   product_name_norm 로드: {len(norm_list)}개 항목")
     return norm_list
 
+
+
+def load_custom_ingredient_dict_from_iceberg(catalog) -> list[dict]:
+    """
+    Iceberg custom_ingredient_dict 테이블에서 커스텀 성분 사전을 로드합니다.
+
+    Returns:
+        list[{"raw", "standard", "action"}]
+            action='add'      → KCIA에 없는 경우에만 추가
+            action='override' → KCIA에 있어도 강제 덮어쓰기
+    """
+    table = catalog.load_table(Iceberg.CUSTOM_INGREDIENT_DICT_TABLE)
+    df = table.scan().to_arrow().to_pandas()
+
+    entries = df[["raw", "standard", "action"]].to_dict("records")
+
+    add_count      = sum(1 for e in entries if e["action"] == "add")
+    override_count = sum(1 for e in entries if e["action"] == "override")
+    print(f"   custom_ingredient_dict 로드: {len(entries)}건 "
+          f"(add={add_count}, override={override_count})")
+    return entries
+
+
+def apply_custom_ingredient_dict(mapping: dict, custom_entries: list[dict]) -> dict:
+    """
+    KCIA 매핑 딕셔너리에 커스텀 성분 사전을 적용합니다.
+
+    Aho-Corasick 빌드 전에 호출해야 합니다.
+
+    Args:
+        mapping:       generate_kcia_mapping_dict()로 생성한 딕셔너리
+        custom_entries: load_custom_ingredient_dict_from_iceberg()로 로드한 목록
+
+    Returns:
+        dict: 커스텀 항목이 반영된 매핑 딕셔너리
+    """
+    for entry in custom_entries:
+        raw      = str(entry["raw"]).strip()
+        standard = entry["standard"]
+        action   = entry["action"]
+
+        if not raw:
+            continue
+
+        masked          = raw.replace(",", "_C_")
+        masked_no_space = masked.replace(" ", "")
+
+        if action == "add":
+            if masked not in mapping:
+                mapping[masked] = standard
+            if masked_no_space not in mapping:
+                mapping[masked_no_space] = standard
+        elif action == "override":
+            mapping[masked]          = standard
+            mapping[masked_no_space] = standard
+
+    return mapping
 
 
 def load_garbage_config_from_iceberg(catalog) -> dict:

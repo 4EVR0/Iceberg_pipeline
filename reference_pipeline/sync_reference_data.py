@@ -138,6 +138,41 @@ def sync_garbage_keywords(catalog) -> None:
           f"(exact={len(config.get('exact', []))}, contains={len(config.get('contains', []))})")
 
 
+def sync_custom_ingredient_dict(catalog) -> None:
+    """
+    custom_ingredient_dict.json → Iceberg custom_ingredient_dict 테이블 overwrite
+
+    action:
+        'add'      → KCIA 사전에 없는 경우에만 추가 (CoSING/구KCIA 성분, 동의어)
+        'override' → KCIA 사전에 있어도 강제 덮어쓰기 (구명칭 충돌 수정)
+    """
+    entries = _load_json(DataPath.CUSTOM_INGREDIENT_DICT_JSON)
+
+    synced_at = datetime.now(timezone.utc)
+
+    raws      = [e["raw"]                   for e in entries]
+    standards = [e.get("standard")          for e in entries]
+    actions   = [e["action"]               for e in entries]
+    reasons   = [e.get("reason")           for e in entries]
+    synced_ats = [synced_at] * len(entries)
+
+    add_count      = sum(1 for a in actions if a == "add")
+    override_count = sum(1 for a in actions if a == "override")
+
+    table = catalog.load_table(Iceberg.CUSTOM_INGREDIENT_DICT_TABLE)
+    arrow_table = _to_arrow(table, {
+        "raw":       pa.array(raws,       type=pa.string()),
+        "standard":  pa.array(standards,  type=pa.string()),
+        "action":    pa.array(actions,    type=pa.string()),
+        "reason":    pa.array(reasons,    type=pa.string()),
+        "synced_at": pa.array(synced_ats, type=pa.timestamp("us", tz="UTC")),
+    })
+
+    table.overwrite(arrow_table)
+    print(f"   custom_ingredient_dict sync 완료: {len(entries)}건 "
+          f"(add={add_count}, override={override_count})")
+
+
 # ==========================================
 # 실행 진입점
 # ==========================================
@@ -152,5 +187,8 @@ if __name__ == "__main__":
 
     print(f"\n[garbage] {Iceberg.GARBAGE_KEYWORDS_TABLE}")
     sync_garbage_keywords(catalog)
+
+    print(f"\n[custom_ingredient] {Iceberg.CUSTOM_INGREDIENT_DICT_TABLE}")
+    sync_custom_ingredient_dict(catalog)
 
     print("\n=== 완료 ===")
