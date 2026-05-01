@@ -30,4 +30,13 @@ with DAG(
         environment={"AWS_DEFAULT_REGION": "ap-northeast-2"},
     )
 
-    sync_reference >> bronze_to_silver
+    silver_to_gold = DockerOperator(
+        task_id="silver_to_gold",
+        image=IMAGE,
+        command="silver_to_gold",
+        network_mode="host",
+        auto_remove="success",
+        environment={"AWS_DEFAULT_REGION": "ap-northeast-2"},
+    )
+
+    sync_reference >> bronze_to_silver >> silver_to_gold

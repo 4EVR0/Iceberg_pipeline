@@ -84,3 +84,37 @@ GOLD_PRODUCT_CHANGE_LOG_SORT = SortOrder(
         direction=SortDirection.ASC, null_order=NullOrder.NULLS_LAST,
     )
 )
+
+
+# ==========================================
+# gold_product_ingredients
+# ==========================================
+
+GOLD_PRODUCT_INGREDIENTS_SCHEMA = Schema(
+    NestedField(1,  "ingredient_name",      StringType(),      required=False),
+    NestedField(2,  "inci_name",            StringType(),      required=False),
+    NestedField(3,  "kor_name",             StringType(),      required=False),
+    NestedField(4,  "eng_name",             StringType(),      required=False),
+    NestedField(5,  "cosing_functions",     StringType(),      required=False),
+    NestedField(6,  "status",               StringType(),      required=False),
+    NestedField(7,  "cosmetic_restriction", StringType(),      required=False),
+    NestedField(8,  "other_restrictions",   StringType(),      required=False),
+    NestedField(9,  "usage_count",          LongType(),        required=False),
+    NestedField(10, "batch_job",            StringType(),      required=False),
+    NestedField(11, "batch_date",           TimestamptzType(), required=False),
+)
+
+# batch_date 일 단위 파티션 → 날짜별 스냅샷 조회 최적화
+GOLD_PRODUCT_INGREDIENTS_PARTITION = PartitionSpec(
+    PartitionField(
+        source_id=11, field_id=1001,
+        transform=DayTransform(), name="batch_date_day",
+    )
+)
+
+GOLD_PRODUCT_INGREDIENTS_SORT = SortOrder(
+    SortField(
+        source_id=11, transform=IdentityTransform(),
+        direction=SortDirection.DESC, null_order=NullOrder.NULLS_LAST,
+    )
+)

@@ -47,6 +47,10 @@ class S3:
     REFERENCE_GARBAGE_KEYWORDS_PATH      = f"s3://{BUCKET}/reference/garbage_keywords/"
     REFERENCE_CUSTOM_INGREDIENT_DICT_PATH = f"s3://{BUCKET}/reference/custom_ingredient_dict/"
 
+    # INCI Gold: INCI_data_gold/kcia_cosing/batch=YYYY-MM/kcia_cosing_gold_ingredients.csv
+    INCI_GOLD_PREFIX       = "INCI_data_gold/kcia_cosing"
+    INCI_GOLD_GLOB_PATTERN = f"s3://{BUCKET}/{INCI_GOLD_PREFIX}/batch=*/kcia_cosing_gold_ingredients.csv"
+
 
 # ==========================================
 # Glue Catalog / Iceberg 설정
@@ -60,6 +64,7 @@ class Iceberg:
     CATEGORY_MASTER_TABLE              = f"{DATABASE}.oliveyoung_category_master"
     GOLD_INGREDIENT_FREQUENCY_TABLE    = f"{DATABASE}.gold_ingredient_frequency"
     GOLD_PRODUCT_CHANGE_LOG_TABLE      = f"{DATABASE}.gold_product_change_log"
+    GOLD_PRODUCT_INGREDIENTS_TABLE     = f"{DATABASE}.gold_product_ingredients"
     TYPO_MAP_TABLE                     = f"{DATABASE}.typo_map"
     GARBAGE_KEYWORDS_TABLE             = f"{DATABASE}.garbage_keywords"
     CUSTOM_INGREDIENT_DICT_TABLE       = f"{DATABASE}.custom_ingredient_dict"
