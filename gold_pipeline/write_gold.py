@@ -51,7 +51,7 @@ def _build_arrow(df: pd.DataFrame, table) -> pa.Table:
     for field in iceberg_arrow_schema:
         col = field.name
         values = work_df[col].tolist() if col in work_df.columns else [None] * len(work_df)
-        arrow_dict[col] = pa.array(values, type=field.type)
+        arrow_dict[col] = pa.array(values, type=field.type, from_pandas=True)
 
     return pa.table(arrow_dict, schema=iceberg_arrow_schema)
 

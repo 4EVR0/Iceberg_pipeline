@@ -119,13 +119,6 @@ def write_gold_product_ingredients(
     result_df["batch_job"]  = batch_job
     result_df["batch_date"] = pd.to_datetime(batch_date, utc=True)
 
-    # LEFT JOIN 미매핑 행의 NaN → None 변환 (PyArrow StringType은 float NaN 거부)
-    _inci_str_cols = ["inci_name", "kor_name", "eng_name", "cosing_functions",
-                      "status", "cosmetic_restriction", "other_restrictions"]
-    result_df[_inci_str_cols] = result_df[_inci_str_cols].where(
-        result_df[_inci_str_cols].notna(), other=None
-    )
-
     gold_table  = catalog.load_table(Iceberg.GOLD_PRODUCT_INGREDIENTS_TABLE)
     arrow_table = _build_arrow(result_df, gold_table)
     gold_table.overwrite(arrow_table, overwrite_filter=AlwaysTrue())
