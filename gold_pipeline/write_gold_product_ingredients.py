@@ -116,7 +116,7 @@ def write_gold_product_ingredients(
     logger.info(f"unique 성분: {total}건 | INCI 매핑 성공: {matched}건 ({match_rate:.1%})")
 
     result_df["batch_job"]  = batch_job
-    result_df["batch_date"] = pd.Timestamp(batch_date, tz="UTC")
+    result_df["batch_date"] = pd.to_datetime(batch_date, utc=True)
 
     gold_table  = catalog.load_table(Iceberg.GOLD_PRODUCT_INGREDIENTS_TABLE)
     arrow_table = _build_arrow(result_df, gold_table)
