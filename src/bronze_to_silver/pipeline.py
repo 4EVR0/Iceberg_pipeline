@@ -4,28 +4,19 @@ Bronze → Silver 전처리 파이프라인 오케스트레이션 로직
 
 import sys
 
-from config.settings import Iceberg, DataPath, DuckDB
+from config.settings import Iceberg, DuckDB
 from models.pipeline_models import Dictionaries
 from src.bronze_to_silver.ac_builder import (
-    load_kcia_mapping_dict,
-    load_typo_maps,
-    load_garbage_config,
+    generate_kcia_mapping_dict,
+    load_custom_ingredient_dict_from_iceberg,
+    apply_custom_ingredient_dict,
+    load_typo_maps_from_iceberg,
+    load_product_name_norms_from_iceberg,
+    load_garbage_config_from_iceberg,
     build_ahocorasick,
 )
 from src.bronze_to_silver.cleaner import process_pipeline
 from silver_pipeline.write_silver import write_to_iceberg, write_csv_to_s3
-
-
-def load_category_master():
-    """
-    Iceberg catalog에서 oliveyoung_category_master 테이블을 로드합니다.
-
-    Returns:
-        pd.DataFrame: category_id, main_category, sub_category 컬럼
-    """
-    catalog = Iceberg.get_catalog()
-    table = catalog.load_table(Iceberg.CATEGORY_MASTER_TABLE)
-    return table.scan().to_arrow().to_pandas()
 
 
 def load_bronze_data(con):
@@ -60,32 +51,35 @@ def load_dictionaries(con) -> Dictionaries:
     """
     KCIA 사전, 유의어/오타 사전, garbage 설정, Aho-Corasick 오토마타를 준비합니다.
     """
-    print("5. KCIA 성분 사전 준비...")
-    kcia_csv_path = DuckDB.get_latest_kcia_s3_path(con)
-    kcia_dict = load_kcia_mapping_dict(
-        csv_path        = kcia_csv_path,
-        json_cache_path = DataPath.KCIA_MAPPING_JSON,
-    )
-    print(f"   {len(kcia_dict)}개 키워드 로드됨\n")
+    catalog = Iceberg.get_catalog()
 
-    print("6. 유의어/오타 사전 로드...")
-    typo_list, typo_regex_list = load_typo_maps(
-        typo_map_path       = DataPath.TYPO_MAP_JSON,
-        typo_map_regex_path = DataPath.TYPO_MAP_REGEX_JSON,
-    )
+    print("4. KCIA 성분 사전 준비...")
+    kcia_csv_path = DuckDB.get_latest_kcia_s3_path(con)
+    kcia_dict = generate_kcia_mapping_dict(kcia_csv_path)
+    print(f"   KCIA: {len(kcia_dict)}개 키워드 로드됨")
+    custom_entries = load_custom_ingredient_dict_from_iceberg(catalog)
+    kcia_dict = apply_custom_ingredient_dict(kcia_dict, custom_entries)
+    print(f"   커스텀 적용 후 총 {len(kcia_dict)}개 키워드\n")
+
+    print("5. 유의어/오타 사전 로드...")
+    typo_list, typo_regex_list = load_typo_maps_from_iceberg(catalog)
+
+    print("\n6. 제품명 정규화 규칙 로드...")
+    product_name_norm_list = load_product_name_norms_from_iceberg(catalog)
 
     print("\n7. garbage 키워드 설정 로드...")
-    garbage_config = load_garbage_config(DataPath.GARBAGE_KEYWORDS_JSON)
+    garbage_config = load_garbage_config_from_iceberg(catalog)
 
     print("\n8. Aho-Corasick 빌드...")
     ac_automaton = build_ahocorasick(kcia_dict)
     print("   빌드 완료\n")
 
     return Dictionaries(
-        ac_automaton    = ac_automaton,
-        typo_list       = typo_list,
-        typo_regex_list = typo_regex_list,
-        garbage_config  = garbage_config,
+        ac_automaton           = ac_automaton,
+        typo_list              = typo_list,
+        typo_regex_list        = typo_regex_list,
+        garbage_config         = garbage_config,
+        product_name_norm_list = product_name_norm_list,
     )
 
 
@@ -97,25 +91,16 @@ def run_pipeline():
     con = DuckDB.get_connection()
 
     raw_df = load_bronze_data(con)
-
-    print("4. category_master 로드...")
-    try:
-        category_df = load_category_master()
-        print(f"   {len(category_df)}개 카테고리 로드됨\n")
-    except Exception as e:
-        print(f"[WARN] category_master 로드 실패 → category_id=None 으로 진행: {e}\n")
-        category_df = None
-
-    dicts = load_dictionaries(con)
+    dicts  = load_dictionaries(con)
 
     print("9. 전처리 파이프라인 실행...")
     silver_df, error_df = process_pipeline(
-        df              = raw_df,
-        ac_automaton    = dicts.ac_automaton,
-        typo_list       = dicts.typo_list,
-        typo_regex_list = dicts.typo_regex_list,
-        category_df     = category_df,
-        garbage_config  = dicts.garbage_config,
+        df                     = raw_df,
+        ac_automaton           = dicts.ac_automaton,
+        typo_list              = dicts.typo_list,
+        typo_regex_list        = dicts.typo_regex_list,
+        garbage_config         = dicts.garbage_config,
+        product_name_norm_list = dicts.product_name_norm_list,
     )
     print(f"   정상: {len(silver_df)}건 / 에러: {len(error_df)}건\n")
 

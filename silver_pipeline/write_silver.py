@@ -213,8 +213,16 @@ def _build_arrow_table_for_error(df: pd.DataFrame, table) -> pa.Table:
     arrow_dict: dict[str, pa.Array] = {}
     for field in iceberg_arrow_schema:
         col = field.name
-        values = work_df[col].tolist() if col in work_df.columns else [None] * len(work_df)
-        arrow_dict[col] = pa.array(values, type=field.type)
+        if col not in work_df.columns:
+            arrow_dict[col] = pa.array([None] * len(work_df), type=field.type)
+        else:
+            values = [
+                None if (v is None or (isinstance(v, float) and pd.isna(v))) else v
+                for v in work_df[col]
+            ]
+            if pa.types.is_string(field.type):
+                values = [str(v) if v is not None else None for v in values]
+            arrow_dict[col] = pa.array(values, type=field.type)
 
     pa_table = pa.table(arrow_dict, schema=iceberg_arrow_schema)
 

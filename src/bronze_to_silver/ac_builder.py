@@ -8,9 +8,10 @@ KCIA 성분 사전 빌드 및 Aho-Corasick 오토마타 모듈
 """
 
 import os
-import json
 import pandas as pd
 import ahocorasick
+
+from config.settings import Iceberg
 
 
 # ==========================================
@@ -78,127 +79,146 @@ def generate_kcia_mapping_dict(csv_path: str) -> dict:
     return mapping
  
  
-def load_kcia_mapping_dict(
-    csv_path: str,
-    json_cache_path: str,
-) -> dict:
-    """
-    CSV가 있으면 CSV에서 변환해서 사용하고,
-    CSV에 문제가 있으면 JSON 폴백으로 로드합니다.
- 
-    우선순위:
-        1. CSV → generate_kcia_mapping_dict() 로 변환 (성공 시 JSON 캐시도 갱신)
-        2. CSV 실패 → JSON 폴백 (기존 캐시 사용)
-        3. 둘 다 없으면 RuntimeError
- 
-    Args:
-        csv_path:        KCIA 원본 CSV 경로
-        json_cache_path: 폴백 및 캐시 저장 경로
- 
-    Returns:
-        dict: KCIA 매핑 딕셔너리
- 
-    Raises:
-        RuntimeError: CSV와 JSON 모두 사용 불가능한 경우
-    """
-    # 1. CSV 시도
-    is_s3 = csv_path.startswith("s3://")
-    csv_exists = is_s3 or os.path.exists(csv_path)
-
-    if csv_exists:
-        try:
-            print(f"   KCIA 사전 생성 중 (CSV: {csv_path}) ...")
-            mapping = generate_kcia_mapping_dict(csv_path)
-            # 성공 시 JSON 캐시 갱신
-            os.makedirs(os.path.dirname(json_cache_path), exist_ok=True)
-            with open(json_cache_path, 'w', encoding='utf-8') as f:
-                json.dump(mapping, f, ensure_ascii=False, indent=2)
-            print(f"   변환 완료: {len(mapping)}개 키워드 (캐시 갱신: {json_cache_path})")
-            return mapping
-        except Exception as e:
-            print(f"   [WARN] CSV 변환 실패 ({e}) → JSON 폴백 시도")
-    else:
-        print(f"   [WARN] CSV 없음 ({csv_path}) → JSON 폴백 시도")
- 
-    # 2. JSON 폴백
-    if os.path.exists(json_cache_path):
-        print(f"   KCIA 사전 JSON 폴백 로드: {json_cache_path}")
-        with open(json_cache_path, 'r', encoding='utf-8') as f:
-            mapping = json.load(f)
-        print(f"   로드 완료: {len(mapping)}개 키워드")
-        return mapping
- 
-    # 3. 둘 다 없음
-    raise RuntimeError(
-        f"KCIA 사전을 로드할 수 없습니다.\n"
-        f"  CSV : {csv_path}\n"
-        f"  JSON: {json_cache_path}\n"
-        f"둘 중 하나가 반드시 존재해야 합니다."
-    )
-
 
 # ==========================================
-# 2. 유의어/오타 사전 로드
+# 2. Reference Data Iceberg 로드
 # ==========================================
 
-def load_typo_maps(
-    typo_map_path: str,
-    typo_map_regex_path: str,
-) -> tuple[list[dict], list[dict]]:
+def load_typo_maps_from_iceberg(catalog) -> tuple[list[dict], list[dict]]:
     """
-    typo_map.json과 typo_map_regex.json을 로드합니다.
-    파일이 없으면 빈 리스트를 반환합니다.
+    Iceberg typo_map 테이블에서 성분명 오타/유의어 사전을 로드합니다.
+    apply_to='ingredient' 행만 대상으로 합니다.
 
-    두 파일 모두 raw 길이 내림차순으로 정렬되어 저장되어 있어야 합니다.
-    (긴 raw부터 치환해야 부분집합 오염을 방지할 수 있습니다.)
-
-    Args:
-        typo_map_path:       typo_map.json 경로 (list[{"raw", "fix"}])
-        typo_map_regex_path: typo_map_regex.json 경로 (list[{"raw", "fix", "pattern"}])
+    정렬 기준: raw 길이 내림차순 (긴 raw부터 치환해야 부분집합 오염 방지)
 
     Returns:
         (typo_list, typo_regex_list)
-            typo_list:       단순 치환용 리스트
-            typo_regex_list: 정규식 치환용 리스트 (pattern 필드 포함)
+            typo_list:       match_type='simple'         → list[{"raw", "fix"}]
+            typo_regex_list: match_type='regex_boundary' → list[{"raw", "fix"}]
     """
-    def _load(path: str, label: str) -> list[dict]:
-        if not os.path.exists(path):
-            print(f"   {label} 없음 (건너뜀): {path}")
-            return []
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        print(f"   {label} 로드: {len(data)}개 항목")
-        return data
+    table = catalog.load_table(Iceberg.TYPO_MAP_TABLE)
+    df = table.scan().to_arrow().to_pandas()
 
-    typo_list       = _load(typo_map_path,       "typo_map")
-    typo_regex_list = _load(typo_map_regex_path, "typo_map_regex")
+    # apply_to 컬럼이 있으면 ingredient 행만, 없으면 전체(하위 호환)
+    if "apply_to" in df.columns:
+        df = df[df["apply_to"].isin(["ingredient", None]) | df["apply_to"].isna()]
+
+    df = (
+        df.assign(_raw_len=df["raw"].str.len())
+          .sort_values("_raw_len", ascending=False)
+          .drop(columns=["_raw_len", "synced_at", "apply_to"], errors="ignore")
+    )
+
+    typo_list       = df[df["match_type"] == "simple"][["raw", "fix"]].to_dict("records")
+    typo_regex_list = df[df["match_type"] == "regex_boundary"][["raw", "fix"]].to_dict("records")
+
+    print(f"   typo_map 로드: simple={len(typo_list)}, regex_boundary={len(typo_regex_list)}개 항목")
     return typo_list, typo_regex_list
 
 
-def load_garbage_config(json_path: str) -> dict:
+def load_product_name_norms_from_iceberg(catalog) -> list[dict]:
     """
-    garbage_keywords.json을 로드합니다.
-    파일이 없으면 빈 딕셔너리를 반환합니다.
+    Iceberg typo_map 테이블에서 제품명 표기 정규화 규칙을 로드합니다.
+    apply_to='product_name' 행만 대상으로 합니다.
+
+    Returns:
+        list[{"raw", "fix", "match_type"}]
+            match_type='regex'  → re.compile(raw).sub(fix, text)
+            match_type='simple' → text.replace(raw, fix)
+    """
+    table = catalog.load_table(Iceberg.TYPO_MAP_TABLE)
+    df = table.scan().to_arrow().to_pandas()
+
+    if "apply_to" not in df.columns:
+        print("   product_name_norm: apply_to 컬럼 없음 — 빈 목록 반환")
+        return []
+
+    df = df[df["apply_to"] == "product_name"][["raw", "fix", "match_type"]]
+    norm_list = df.to_dict("records")
+
+    print(f"   product_name_norm 로드: {len(norm_list)}개 항목")
+    return norm_list
+
+
+
+def load_custom_ingredient_dict_from_iceberg(catalog) -> list[dict]:
+    """
+    Iceberg custom_ingredient_dict 테이블에서 커스텀 성분 사전을 로드합니다.
+
+    Returns:
+        list[{"raw", "standard", "action"}]
+            action='add'      → KCIA에 없는 경우에만 추가
+            action='override' → KCIA에 있어도 강제 덮어쓰기
+    """
+    table = catalog.load_table(Iceberg.CUSTOM_INGREDIENT_DICT_TABLE)
+    df = table.scan().to_arrow().to_pandas()
+
+    entries = df[["raw", "standard", "action"]].to_dict("records")
+
+    add_count      = sum(1 for e in entries if e["action"] == "add")
+    override_count = sum(1 for e in entries if e["action"] == "override")
+    print(f"   custom_ingredient_dict 로드: {len(entries)}건 "
+          f"(add={add_count}, override={override_count})")
+    return entries
+
+
+def apply_custom_ingredient_dict(mapping: dict, custom_entries: list[dict]) -> dict:
+    """
+    KCIA 매핑 딕셔너리에 커스텀 성분 사전을 적용합니다.
+
+    Aho-Corasick 빌드 전에 호출해야 합니다.
 
     Args:
-        json_path: garbage_keywords.json 경로
+        mapping:       generate_kcia_mapping_dict()로 생성한 딕셔너리
+        custom_entries: load_custom_ingredient_dict_from_iceberg()로 로드한 목록
+
+    Returns:
+        dict: 커스텀 항목이 반영된 매핑 딕셔너리
+    """
+    for entry in custom_entries:
+        raw      = str(entry["raw"]).strip()
+        standard = entry["standard"]
+        action   = entry["action"]
+
+        if not raw:
+            continue
+
+        masked          = raw.replace(",", "_C_")
+        masked_no_space = masked.replace(" ", "")
+
+        if action == "add":
+            if masked not in mapping:
+                mapping[masked] = standard
+            if masked_no_space not in mapping:
+                mapping[masked_no_space] = standard
+        elif action == "override":
+            mapping[masked]          = standard
+            mapping[masked_no_space] = standard
+
+    return mapping
+
+
+def load_garbage_config_from_iceberg(catalog) -> dict:
+    """
+    Iceberg garbage_keywords 테이블에서 가비지 필터링 설정을 로드합니다.
 
     Returns:
         dict: {"exact": [...], "contains": [...]}
     """
-    if not os.path.exists(json_path):
-        print(f"   garbage_keywords 없음 (건너뜀): {json_path}")
-        return {}
-    with open(json_path, 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    exact_n    = len(config.get("exact", []))
-    contains_n = len(config.get("contains", []))
-    print(f"   garbage_keywords 로드: exact={exact_n}, contains={contains_n}")
+    table = catalog.load_table(Iceberg.GARBAGE_KEYWORDS_TABLE)
+    df = table.scan().to_arrow().to_pandas()
+
+    config = {
+        "exact":    df[df["match_type"] == "exact"]["keyword"].tolist(),
+        "contains": df[df["match_type"] == "contains"]["keyword"].tolist(),
+    }
+
+    print(f"   garbage_keywords 로드: exact={len(config['exact'])}, contains={len(config['contains'])}")
     return config
 
 
 # ==========================================
-# 3. Aho-Corasick 오토마타 빌드 및 탐색
+# 4. Aho-Corasick 오토마타 빌드 및 탐색
 # ==========================================
 
 def build_ahocorasick(mapping_dict: dict) -> ahocorasick.Automaton:

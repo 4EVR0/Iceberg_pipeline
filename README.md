@@ -37,6 +37,13 @@ CSV 내보내기 (S3 data_csv/)
 
 ```
 Iceberg_pipeline/
+├── Dockerfile                         # 파이프라인 컨테이너 이미지 빌드
+├── requirements.txt                   # 파이프라인 의존성 (Docker 빌드용)
+├── requirements-dev.txt               # 분석·로컬 개발용 의존성 (jupyter 포함)
+├── scripts/
+│   └── entrypoint.sh                  # 컨테이너 실행 모드 분기
+├── dags/
+│   └── oliveyoung_pipeline.py         # Airflow DAG (DockerOperator)
 ├── config/
 │   └── settings.py                    # AWS / S3 / Iceberg / DuckDB 설정
 ├── data/                              # 로컬 사전 파일
@@ -52,6 +59,10 @@ Iceberg_pipeline/
 │   ├── pipeline.py                    # 오케스트레이션
 │   ├── cleaner.py                     # 데이터 정제 로직
 │   └── ac_builder.py                  # Aho-Corasick 자동화 빌더
+├── reference_pipeline/                # Reference 데이터 관리
+│   ├── schemas.py
+│   ├── create_reference_tables.py
+│   └── sync_reference_data.py         # JSON → Iceberg 동기화
 ├── silver_pipeline/                   # Iceberg 테이블 생성 & 쓰기
 │   ├── schemas.py                     # 스키마 정의 (파티션·정렬 포함)
 │   ├── create_silver.py               # Silver 테이블 초기화
@@ -61,8 +72,7 @@ Iceberg_pipeline/
 │   ├── create_gold_frequency_table.py # Gold 테이블 초기화
 │   └── query_gold_frequency.py        # Gold 조회 (애드혹 분석)
 ├── src/gold_ingredient_frequency.py   # Gold 집계 실행 진입점
-├── jupyter/                           # 탐색용 노트북
-└── requirements.txt
+└── jupyter/                           # 탐색용 노트북
 ```
 
 ---
@@ -78,26 +88,21 @@ Iceberg_pipeline/
 | `boto3` | AWS S3 작업 |
 | `pyarrow` | Iceberg 쓰기용 Arrow 직렬화 |
 
+분석·로컬 개발 시에는 `requirements-dev.txt`를 사용합니다 (`ipykernel` 포함).
+
 ---
 
-## 환경 설정
+## 환경 변수
 
-### 1. 의존성 설치
+`config/settings.py`는 아래 환경 변수를 읽으며, 미설정 시 괄호 안의 기본값을 사용합니다.
 
-```bash
-pip install -r requirements.txt
-```
+| 환경 변수 | 기본값 | 용도 |
+|-----------|--------|------|
+| `AWS_DEFAULT_REGION` | `ap-northeast-2` | AWS SDK 리전 |
+| `S3_BUCKET` | `oliveyoung-crawl-data` | S3 버킷명 |
+| `ICEBERG_DATABASE` | `oliveyoung_db` | Glue Catalog 데이터베이스명 |
 
-### 2. 환경 변수 설정
-
-`.env` 파일 생성 (EC2 프로덕션 환경에서는 IAM Role로 대체):
-
-```env
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-AWS_DEFAULT_REGION=ap-northeast-2
-S3_BUCKET=oliveyoung-crawl-data
-```
+EC2 프로덕션 환경에서는 IAM Role이 자동으로 AWS 인증을 처리하므로 별도 키 설정이 필요 없습니다.
 
 ---
 
@@ -106,25 +111,80 @@ S3_BUCKET=oliveyoung-crawl-data
 ### Iceberg 테이블 초기화 (최초 1회)
 
 ```bash
-# Silver 테이블 생성
 python silver_pipeline/create_silver.py
-
-# 카테고리 마스터 테이블 생성
 python silver_pipeline/create_category_master.py
-
-# Gold 테이블 생성
+python reference_pipeline/create_reference_tables.py
 python gold_pipeline/create_gold_frequency_table.py
+python reference_pipeline/sync_reference_data.py
 ```
 
-### 파이프라인 실행
+### EC2에서 직접 실행
 
 ```bash
+# Reference 테이블 동기화
+python reference_pipeline/sync_reference_data.py
+
 # Bronze → Silver 처리
 python src/bronze_to_silver/main.py
 
 # Silver → Gold 집계
 python src/gold_ingredient_frequency.py
 ```
+
+---
+
+## Docker
+
+### 이미지 빌드
+
+```bash
+docker build -t oliveyoung-pipeline .
+```
+
+### 컨테이너 실행
+
+EC2 IAM Role 인증을 그대로 사용하기 위해 `--network host`로 실행합니다.
+
+```bash
+# Reference 테이블 동기화
+docker run --network host oliveyoung-pipeline sync_reference
+
+# Bronze → Silver 처리
+docker run --network host oliveyoung-pipeline bronze_to_silver
+```
+
+환경 변수를 오버라이드하려면 `-e` 플래그를 사용합니다.
+
+```bash
+docker run --network host \
+  -e S3_BUCKET=oliveyoung-crawl-data-staging \
+  -e ICEBERG_DATABASE=oliveyoung_db_dev \
+  oliveyoung-pipeline bronze_to_silver
+```
+
+---
+
+## Airflow 연동
+
+`dags/oliveyoung_pipeline.py`에 DockerOperator 기반 DAG가 정의되어 있습니다.
+
+```
+sync_reference_data  →  bronze_to_silver
+```
+
+- `schedule=None` — 크롤링 DAG 완료 후 `TriggerDagRunOperator`로 트리거됩니다.
+- 크롤링 DAG에 아래 task를 추가하면 자동 연결됩니다.
+
+```python
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+
+trigger = TriggerDagRunOperator(
+    task_id="trigger_oliveyoung_pipeline",
+    trigger_dag_id="oliveyoung_bronze_to_silver",
+)
+```
+
+DAG 파일은 Airflow의 `dags/` 경로에 배포하면 UI에서 바로 확인할 수 있습니다.
 
 ---
 
@@ -155,7 +215,7 @@ python src/gold_ingredient_frequency.py
 | `residual_text` | string | 파싱 실패 잔여 텍스트 |
 | (기타 공통 필드) | | |
 
-**오류 타입 예시**: `INVALID_INGREDIENTS`, `INVALID_PRODUCT_NAME`, `DUPLICATE_PRODUCT_REJECTED`
+**오류 타입**: `INCOMPLETE_DATA_REJECTED` · `OPTION_BUNDLE_REJECTED` · `INVALID_METADATA_REJECTED` · `HETEROGENEOUS_BUNDLE_REJECTED` · `DUPLICATE_PRODUCT_REJECTED` · `UNMAPPED_RESIDUAL` · `HIDDEN_BUNDLE_REJECTED`
 
 ---
 
@@ -186,3 +246,7 @@ python src/gold_ingredient_frequency.py
 ### DuckDB + Glob으로 최신 데이터 탐색
 `glob()` + 정규식 `run_id` 추출 + `GROUP BY max(run_id)` 로 서브카테고리별 최신 파일 자동 탐색.
 경로 하드코딩 없이 멱등 실행 보장.
+
+### Reference 테이블 분리 관리
+오타 사전·불량 키워드를 Git 관리 JSON으로 편집하고, `sync_reference_data.py`로 Iceberg에 동기화.
+코드 재배포 없이 사전 업데이트 가능.

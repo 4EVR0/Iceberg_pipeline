@@ -16,8 +16,8 @@ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Icebe
 # AWS / S3 경로 설정
 # ==========================================
 class S3:
-    REGION = "ap-northeast-2"
-    BUCKET = "oliveyoung-crawl-data"
+    REGION = os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2")
+    BUCKET = os.getenv("S3_BUCKET", "oliveyoung-crawl-data")
 
     # Bronze: s3://.../oliveyoung/main_category/sub_category/run_id=YYYYMMDD_HHMMSS/part_*.json
     BRONZE_PREFIX       = "oliveyoung"
@@ -25,7 +25,7 @@ class S3:
 
     # KCIA: INCI_data_silver/kcia_cosing/batch=YYYY-MM/kcia_cosing_matched_final.csv
     KCIA_PREFIX       = "INCI_data_silver/kcia_cosing"
-    KCIA_GLOB_PATTERN = f"s3://{BUCKET}/{KCIA_PREFIX}/batch=*/kcia_cosing_matched_final.csv"
+    KCIA_GLOB_PATTERN = f"s3://{BUCKET}/{KCIA_PREFIX}/batch=*/kcia_cosing_graphrag_map.csv"
 
     # Silver
     SILVER_CURRENT_PATH  = f"s3://{BUCKET}/silver/current/"
@@ -42,17 +42,27 @@ class S3:
     # 처리 결과 CSV 저장 (조회용)
     DATA_CSV_PATH = f"s3://{BUCKET}/data_csv/"
 
+    # Reference Data (typo_map, garbage_keywords, custom_ingredient_dict)
+    REFERENCE_TYPO_MAP_PATH              = f"s3://{BUCKET}/reference/typo_map/"
+    REFERENCE_GARBAGE_KEYWORDS_PATH      = f"s3://{BUCKET}/reference/garbage_keywords/"
+    REFERENCE_CUSTOM_INGREDIENT_DICT_PATH = f"s3://{BUCKET}/reference/custom_ingredient_dict/"
+
 
 # ==========================================
 # Glue Catalog / Iceberg 설정
 # ==========================================
 class Iceberg:
     CATALOG_NAME          = "glue"
-    DATABASE              = "oliveyoung_db"
+    DATABASE              = os.getenv("ICEBERG_DATABASE", "oliveyoung_db")
     SILVER_CURRENT_TABLE  = f"{DATABASE}.oliveyoung_silver_current"
     SILVER_HISTORY_TABLE  = f"{DATABASE}.oliveyoung_silver_history"
     SILVER_ERROR_TABLE    = f"{DATABASE}.oliveyoung_silver_error"
-    CATEGORY_MASTER_TABLE = f"{DATABASE}.oliveyoung_category_master"
+    CATEGORY_MASTER_TABLE              = f"{DATABASE}.oliveyoung_category_master"
+    GOLD_INGREDIENT_FREQUENCY_TABLE    = f"{DATABASE}.gold_ingredient_frequency"
+    GOLD_PRODUCT_CHANGE_LOG_TABLE      = f"{DATABASE}.gold_product_change_log"
+    TYPO_MAP_TABLE                     = f"{DATABASE}.typo_map"
+    GARBAGE_KEYWORDS_TABLE             = f"{DATABASE}.garbage_keywords"
+    CUSTOM_INGREDIENT_DICT_TABLE       = f"{DATABASE}.custom_ingredient_dict"
 
     @staticmethod
     def get_catalog():
@@ -72,10 +82,11 @@ class Iceberg:
 class DataPath:
     DATA_DIR              = os.path.join(_BASE_DIR, "data")
     KCIA_CSV              = os.path.join(DATA_DIR, "kcia_ingredient_dict2.csv")
-    KCIA_MAPPING_JSON     = os.path.join(DATA_DIR, "kcia_mapping_dict.json")
-    TYPO_MAP_JSON         = os.path.join(DATA_DIR, "typo_map.json")
-    TYPO_MAP_REGEX_JSON   = os.path.join(DATA_DIR, "typo_map_regex.json")
-    GARBAGE_KEYWORDS_JSON = os.path.join(DATA_DIR, "garbage_keywords.json")
+    TYPO_MAP_JSON              = os.path.join(DATA_DIR, "typo_map.json")
+    TYPO_MAP_REGEX_JSON        = os.path.join(DATA_DIR, "typo_map_regex.json")
+    GARBAGE_KEYWORDS_JSON      = os.path.join(DATA_DIR, "garbage_keywords.json")
+    PRODUCT_NAME_NORM_MAP_JSON     = os.path.join(DATA_DIR, "product_name_norm_map.json")
+    CUSTOM_INGREDIENT_DICT_JSON    = os.path.join(DATA_DIR, "custom_ingredient_dict.json")
 
     
 

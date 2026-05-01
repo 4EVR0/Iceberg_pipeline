@@ -1,0 +1,12 @@
+.git
+.claude
+jupyter
+dags
+requirements-dev.txt
+.env.example
+*.md
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.gitignore

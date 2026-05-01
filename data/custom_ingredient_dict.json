@@ -1,0 +1,62 @@
+[
+  {
+    "raw": "라즈베리씨오일/팜오일아미노프로판다이올에스터",
+    "standard": "라즈베리씨오일/팜오일아미노프로판다이올에스터",
+    "action": "add",
+    "reason": "cosing 등재, kcia 미등재"
+  },
+  {
+    "raw": "노나펩타이드-29",
+    "standard": "노나펩타이드-29",
+    "action": "add",
+    "reason": "cosing 등재, kcia 미등재"
+  },
+  {
+    "raw": "헥사펩타이드-35",
+    "standard": "헥사펩타이드-35",
+    "action": "add",
+    "reason": "cosing 등재, kcia 미등재"
+  },
+  {
+    "raw": "폴리글리세릴-24",
+    "standard": "폴리글리세릴-24",
+    "action": "add",
+    "reason": "cosing 등재, kcia 미등재"
+  },
+  {
+    "raw": "하이드록시이소헥실3-사이클로카복스알데하이드",
+    "standard": "하이드록시이소헥실3-사이클로카복스알데하이드",
+    "action": "add",
+    "reason": "cosing 등재, kcia 미등재"
+  },
+  {
+    "raw": "하이드록시이소헥실3-사이클로헥센카복스알데하이드",
+    "standard": "하이드록시이소헥실3-사이클로헥센카복스알데하이드",
+    "action": "add",
+    "reason": "cosing 등재, kcia 미등재"
+  },
+  {
+    "raw": "메밀뿌리추출물",
+    "standard": "메밀뿌리추출물",
+    "action": "add",
+    "reason": "cosing 등재, kcia 미등재"
+  },
+  {
+    "raw": "알코올",
+    "standard": "에탄올",
+    "action": "add",
+    "reason": "일반명 동의어"
+  },
+  {
+    "raw": "레몬그라스추출물",
+    "standard": "레몬그라스추출물",
+    "action": "override",
+    "reason": "카멜그라스추출물 구명칭과 키 충돌, 현재 성분명 우선"
+  },
+  {
+    "raw": "자아만아이리스뿌리추출물",
+    "standard": "독일붓꽃뿌리추출물",
+    "action": "add",
+    "reason": "kcia 구명칭 오타(자아만아아리스→자아만아이리스) 보완"
+  }
+]
