@@ -5,6 +5,13 @@ silver_current의 unique 성분 × kcia_cosing_gold_ingredients(S3 CSV) → gold
 조인 키: silver.product_ingredients[i] ↔ inci_csv.kor_name
 """
 
+import sys
+import os
+
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 import logging
 from datetime import datetime
 
