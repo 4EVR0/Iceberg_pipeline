@@ -89,6 +89,8 @@ GOLD_PRODUCT_CHANGE_LOG_SORT = SortOrder(
 # ==========================================
 # gold_product_ingredients
 # ==========================================
+# overwrite 방식 (current 스냅샷) — 파티션 없음
+# 배치 정보(batch_job, batch_date)는 현재 데이터가 어느 배치 결과인지 추적용으로 유지
 
 GOLD_PRODUCT_INGREDIENTS_SCHEMA = Schema(
     NestedField(1,  "ingredient_name",      StringType(),      required=False),
@@ -102,19 +104,4 @@ GOLD_PRODUCT_INGREDIENTS_SCHEMA = Schema(
     NestedField(9,  "usage_count",          LongType(),        required=False),
     NestedField(10, "batch_job",            StringType(),      required=False),
     NestedField(11, "batch_date",           TimestamptzType(), required=False),
-)
-
-# batch_date 일 단위 파티션 → 날짜별 스냅샷 조회 최적화
-GOLD_PRODUCT_INGREDIENTS_PARTITION = PartitionSpec(
-    PartitionField(
-        source_id=11, field_id=1001,
-        transform=DayTransform(), name="batch_date_day",
-    )
-)
-
-GOLD_PRODUCT_INGREDIENTS_SORT = SortOrder(
-    SortField(
-        source_id=11, transform=IdentityTransform(),
-        direction=SortDirection.DESC, null_order=NullOrder.NULLS_LAST,
-    )
 )

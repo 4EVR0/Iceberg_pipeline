@@ -17,6 +17,7 @@ from datetime import datetime
 
 import duckdb
 import pandas as pd
+from pyiceberg.expressions import AlwaysTrue
 
 from config.settings import Iceberg, S3
 from gold_pipeline.write_gold import _build_arrow
@@ -127,6 +128,6 @@ def write_gold_product_ingredients(
 
     gold_table  = catalog.load_table(Iceberg.GOLD_PRODUCT_INGREDIENTS_TABLE)
     arrow_table = _build_arrow(result_df, gold_table)
-    gold_table.append(arrow_table)
+    gold_table.overwrite(arrow_table, overwrite_filter=AlwaysTrue())
 
-    logger.info(f"gold_product_ingredients append 완료: {total}건")
+    logger.info(f"gold_product_ingredients overwrite 완료: {total}건")
