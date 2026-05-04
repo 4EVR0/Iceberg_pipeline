@@ -7,11 +7,10 @@ KCIA 성분 사전 빌드 및 Aho-Corasick 오토마타 모듈
     - Aho-Corasick 오토마타 빌드 및 탐색
 """
 
-import os
 import pandas as pd
 import ahocorasick
 
-from config.settings import Iceberg
+from config.settings import OliveyoungIceberg, INCIIceberg
 
 
 # ==========================================
@@ -30,51 +29,31 @@ def _kcia_add(mapping: dict, name: str, std_name: str) -> None:
     mapping[masked.replace(" ", "")] = std_name
 
 
-def generate_kcia_mapping_dict(csv_path: str) -> dict:
+def generate_kcia_mapping_dict(inci_catalog) -> dict:
     """
-    KCIA 원본 CSV를 읽어 표준 매핑 딕셔너리를 생성합니다.
-
-    로컬 경로와 S3 경로(s3://) 모두 지원합니다.
-    S3 경로의 경우 os.path.exists() 체크를 건너뜁니다.
+    Iceberg silver_kcia_cosing_graphrag_current 테이블을 읽어 표준 매핑 딕셔너리를 생성합니다.
 
     매핑 규칙:
         - 표준명, 공백제거 표준명 → 표준명
-        - 구이명(old_name_ko, 쉼표 구분) 및 공백제거 버전 → 표준명
+        - 구이명(old_name_ko) 및 공백제거 버전 → 표준명
         - 쉼표는 _C_ 로 마스킹 (Aho-Corasick 탐색 충돌 방지)
 
     Args:
-        csv_path: KCIA CSV 경로 (로컬 또는 S3)
+        inci_catalog: INCIIceberg.get_catalog()로 생성한 Catalog 인스턴스
 
     Returns:
         dict: {검색키: 표준명칭}
-
-    Raises:
-        FileNotFoundError: 로컬 경로인데 파일이 존재하지 않을 때
     """
-    if not csv_path.startswith("s3://") and not os.path.exists(csv_path):
-        raise FileNotFoundError(f"KCIA CSV 파일을 찾을 수 없습니다: {csv_path}")
-
-    df = pd.read_csv(csv_path)
-
-    if 'std_name_ko' not in df.columns:
-        raise ValueError(
-            f"CSV에 필수 컬럼 'std_name_ko'가 없습니다. "
-            f"실제 컬럼: {list(df.columns)}"
-        )
+    table = inci_catalog.load_table(INCIIceberg.SILVER_GRAPHRAG_CURRENT_TABLE)
+    df = table.scan(selected_fields=("std_name_ko", "old_name_ko")).to_arrow().to_pandas()
 
     mapping = {}
-
     for _, row in df.iterrows():
-        if pd.isna(row.get('std_name_ko')):
+        if pd.isna(row.get("std_name_ko")):
             continue
-        std_name = str(row['std_name_ko']).strip()
-
-        # 표준명 등록
+        std_name = str(row["std_name_ko"]).strip()
         _kcia_add(mapping, std_name, std_name)
-
-        # 구이명 등록
-        old_name = str(row['old_name_ko']).strip()
-        _kcia_add(mapping, old_name, std_name)
+        _kcia_add(mapping, row.get("old_name_ko"), std_name)
 
     return mapping
  
@@ -96,7 +75,7 @@ def load_typo_maps_from_iceberg(catalog) -> tuple[list[dict], list[dict]]:
             typo_list:       match_type='simple'         → list[{"raw", "fix"}]
             typo_regex_list: match_type='regex_boundary' → list[{"raw", "fix"}]
     """
-    table = catalog.load_table(Iceberg.TYPO_MAP_TABLE)
+    table = catalog.load_table(OliveyoungIceberg.TYPO_MAP_TABLE)
     df = table.scan().to_arrow().to_pandas()
 
     # apply_to 컬럼이 있으면 ingredient 행만, 없으면 전체(하위 호환)
@@ -126,7 +105,7 @@ def load_product_name_norms_from_iceberg(catalog) -> list[dict]:
             match_type='regex'  → re.compile(raw).sub(fix, text)
             match_type='simple' → text.replace(raw, fix)
     """
-    table = catalog.load_table(Iceberg.TYPO_MAP_TABLE)
+    table = catalog.load_table(OliveyoungIceberg.TYPO_MAP_TABLE)
     df = table.scan().to_arrow().to_pandas()
 
     if "apply_to" not in df.columns:
@@ -150,7 +129,7 @@ def load_custom_ingredient_dict_from_iceberg(catalog) -> list[dict]:
             action='add'      → KCIA에 없는 경우에만 추가
             action='override' → KCIA에 있어도 강제 덮어쓰기
     """
-    table = catalog.load_table(Iceberg.CUSTOM_INGREDIENT_DICT_TABLE)
+    table = catalog.load_table(OliveyoungIceberg.CUSTOM_INGREDIENT_DICT_TABLE)
     df = table.scan().to_arrow().to_pandas()
 
     entries = df[["raw", "standard", "action"]].to_dict("records")
@@ -205,7 +184,7 @@ def load_garbage_config_from_iceberg(catalog) -> dict:
     Returns:
         dict: {"exact": [...], "contains": [...]}
     """
-    table = catalog.load_table(Iceberg.GARBAGE_KEYWORDS_TABLE)
+    table = catalog.load_table(OliveyoungIceberg.GARBAGE_KEYWORDS_TABLE)
     df = table.scan().to_arrow().to_pandas()
 
     config = {

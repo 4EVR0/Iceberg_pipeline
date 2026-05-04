@@ -12,7 +12,7 @@ import duckdb
 import pandas as pd
 import pyarrow as pa
 
-from config.settings import Iceberg
+from config.settings import OliveyoungIceberg
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ def write_gold_ingredient_frequency(catalog, batch_job: str, batch_date: datetim
         batch_date: 배치 기준 시각 (UTC datetime)
     """
     logger.info("silver_current 로드 중...")
-    silver_table = catalog.load_table(Iceberg.SILVER_CURRENT_TABLE)
+    silver_table = catalog.load_table(OliveyoungIceberg.SILVER_CURRENT_TABLE)
     silver_arrow = silver_table.scan(selected_fields=("category_id", "product_ingredients")).to_arrow()
 
     con = duckdb.connect()
@@ -126,7 +126,7 @@ def write_gold_ingredient_frequency(catalog, batch_job: str, batch_date: datetim
     gold_df["batch_job"]  = batch_job
     gold_df["batch_date"] = pd.Timestamp(batch_date, tz="UTC")
 
-    gold_table  = catalog.load_table(Iceberg.GOLD_INGREDIENT_FREQUENCY_TABLE)
+    gold_table  = catalog.load_table(OliveyoungIceberg.GOLD_INGREDIENT_FREQUENCY_TABLE)
     arrow_table = _build_arrow(gold_df, gold_table)
     gold_table.append(arrow_table)
 
@@ -149,7 +149,7 @@ def write_gold_change_log(catalog, change_df: pd.DataFrame) -> None:
         logger.info("변경 레코드 없음 — gold_product_change_log write 건너뜀")
         return
 
-    change_table = catalog.load_table(Iceberg.GOLD_PRODUCT_CHANGE_LOG_TABLE)
+    change_table = catalog.load_table(OliveyoungIceberg.GOLD_PRODUCT_CHANGE_LOG_TABLE)
     arrow_table  = _build_arrow(change_df, change_table)
     change_table.append(arrow_table)
 

@@ -4,7 +4,7 @@ Bronze → Silver 전처리 파이프라인 오케스트레이션 로직
 
 import sys
 
-from config.settings import Iceberg, DuckDB
+from config.settings import OliveyoungIceberg, INCIIceberg, DuckDB
 from models.pipeline_models import Dictionaries
 from src.bronze_to_silver.ac_builder import (
     generate_kcia_mapping_dict,
@@ -47,15 +47,15 @@ def load_bronze_data(con):
     return raw_df
 
 
-def load_dictionaries(con) -> Dictionaries:
+def load_dictionaries() -> Dictionaries:
     """
     KCIA 사전, 유의어/오타 사전, garbage 설정, Aho-Corasick 오토마타를 준비합니다.
     """
-    catalog = Iceberg.get_catalog()
+    catalog      = OliveyoungIceberg.get_catalog()
+    inci_catalog = INCIIceberg.get_catalog()
 
     print("4. KCIA 성분 사전 준비...")
-    kcia_csv_path = DuckDB.get_latest_kcia_s3_path(con)
-    kcia_dict = generate_kcia_mapping_dict(kcia_csv_path)
+    kcia_dict = generate_kcia_mapping_dict(inci_catalog)
     print(f"   KCIA: {len(kcia_dict)}개 키워드 로드됨")
     custom_entries = load_custom_ingredient_dict_from_iceberg(catalog)
     kcia_dict = apply_custom_ingredient_dict(kcia_dict, custom_entries)
@@ -91,7 +91,7 @@ def run_pipeline():
     con = DuckDB.get_connection()
 
     raw_df = load_bronze_data(con)
-    dicts  = load_dictionaries(con)
+    dicts  = load_dictionaries()
 
     print("9. 전처리 파이프라인 실행...")
     silver_df, error_df = process_pipeline(

@@ -12,7 +12,7 @@ Gold 파이프라인 오케스트레이션 진입점
 import logging
 from datetime import datetime, timezone
 
-from config.settings import Iceberg
+from config.settings import OliveyoungIceberg
 from gold_pipeline.cdc import compute_change_log
 from gold_pipeline.write_gold import write_gold_change_log, write_gold_ingredient_frequency
 
@@ -29,7 +29,7 @@ def run_gold_pipeline() -> None:
 
     logger.info(f"=== Gold Pipeline 시작: batch_job={batch_job} ===")
 
-    catalog = Iceberg.get_catalog()
+    catalog = OliveyoungIceberg.get_catalog()
 
     # ----------------------------------------
     # Step 1. CDC

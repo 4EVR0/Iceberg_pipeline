@@ -1,8 +1,8 @@
 """
 Gold 레이어 gold_product_ingredients write 모듈
 
-silver_current의 unique 성분 × kcia_cosing_gold_ingredients(S3 CSV) → gold_product_ingredients append
-조인 키: silver.product_ingredients[i] ↔ inci_csv.kor_name
+silver_current의 unique 성분 × inci_db.gold_kcia_cosing_ingredients_current → gold_product_ingredients overwrite
+조인 키: silver.product_ingredients[i] ↔ inci.kor_name
 """
 
 import sys
@@ -19,7 +19,7 @@ import duckdb
 import pandas as pd
 from pyiceberg.expressions import AlwaysTrue
 
-from config.settings import Iceberg, S3
+from config.settings import OliveyoungIceberg, INCIIceberg
 from gold_pipeline.write_gold import _build_arrow
 
 logger = logging.getLogger(__name__)
@@ -46,32 +46,9 @@ SELECT
     i.other_restrictions,
     u.usage_count
 FROM unique_ingredients u
-LEFT JOIN inci_df i ON u.ingredient_name = i.kor_name
+LEFT JOIN inci_arrow i ON u.ingredient_name = i.kor_name
 ORDER BY u.usage_count DESC, u.ingredient_name
 """
-
-
-def _get_inci_s3_path(con: duckdb.DuckDBPyConnection) -> str:
-    """S3에서 최신 batch의 INCI gold CSV 경로를 반환합니다."""
-    df = con.execute(f"""
-        SELECT
-            file,
-            regexp_extract(file, 'batch=([^/]+)/', 1) AS batch_id
-        FROM glob('{S3.INCI_GOLD_GLOB_PATTERN}')
-        ORDER BY batch_id DESC
-        LIMIT 1
-    """).df()
-
-    if df.empty:
-        raise RuntimeError(
-            f"S3에서 INCI gold CSV를 찾지 못했습니다.\n"
-            f"패턴: {S3.INCI_GOLD_GLOB_PATTERN}"
-        )
-
-    path     = df["file"].iloc[0]
-    batch_id = df["batch_id"].iloc[0]
-    logger.info(f"INCI gold 최신 batch: {batch_id} ({path})")
-    return path
 
 
 def write_gold_product_ingredients(
@@ -80,11 +57,8 @@ def write_gold_product_ingredients(
     batch_date: datetime,
 ) -> None:
     """
-    silver_current의 unique 성분을 INCI gold CSV와 조인하여
-    gold_product_ingredients 에 append 합니다.
-
-    추후 INCI 소스를 Iceberg 테이블로 전환할 때는 _get_inci_s3_path 대신
-    catalog.load_table() 방식으로 _load_inci_data 를 교체합니다.
+    silver_current의 unique 성분을 inci_db.gold_kcia_cosing_ingredients_current와 조인하여
+    gold_product_ingredients 를 overwrite합니다.
 
     Args:
         catalog   : pyiceberg Catalog 인스턴스
@@ -92,34 +66,32 @@ def write_gold_product_ingredients(
         batch_date: 배치 기준 시각 (UTC datetime)
     """
     logger.info("silver_current 로드 중...")
-    silver_table = catalog.load_table(Iceberg.SILVER_CURRENT_TABLE)
+    silver_table = catalog.load_table(OliveyoungIceberg.SILVER_CURRENT_TABLE)
     silver_arrow = silver_table.scan(
         selected_fields=("product_id", "product_ingredients")
     ).to_arrow()
 
-    con = duckdb.connect()
-    con.execute("INSTALL httpfs; LOAD httpfs;")
-    con.execute("INSTALL aws;   LOAD aws;")
-    con.execute("CALL load_aws_credentials();")
-    con.execute(f"SET s3_region='{S3.REGION}';")
-    con.register("silver_arrow", silver_arrow)
+    logger.info("inci_db.gold_kcia_cosing_ingredients_current 로드 중...")
+    inci_catalog = INCIIceberg.get_catalog()
+    inci_table   = inci_catalog.load_table(INCIIceberg.GOLD_INGREDIENTS_CURRENT_TABLE)
+    inci_arrow = inci_table.scan().to_arrow()
 
-    inci_path = _get_inci_s3_path(con)
-    inci_df   = con.execute(f"SELECT * FROM read_csv_auto('{inci_path}')").df()
-    con.register("inci_df", inci_df)
+    con = duckdb.connect()
+    con.register("silver_arrow", silver_arrow)
+    con.register("inci_arrow",   inci_arrow)
 
     result_df: pd.DataFrame = con.execute(_PRODUCT_INGREDIENTS_QUERY).df()
     con.close()
 
-    total       = len(result_df)
-    matched     = result_df["inci_name"].notna().sum()
-    match_rate  = matched / total if total else 0
+    total      = len(result_df)
+    matched    = result_df["inci_name"].notna().sum()
+    match_rate = matched / total if total else 0
     logger.info(f"unique 성분: {total}건 | INCI 매핑 성공: {matched}건 ({match_rate:.1%})")
 
     result_df["batch_job"]  = batch_job
     result_df["batch_date"] = pd.to_datetime(batch_date, utc=True)
 
-    gold_table  = catalog.load_table(Iceberg.GOLD_PRODUCT_INGREDIENTS_TABLE)
+    gold_table  = catalog.load_table(OliveyoungIceberg.GOLD_PRODUCT_INGREDIENTS_TABLE)
     arrow_table = _build_arrow(result_df, gold_table)
     gold_table.overwrite(arrow_table, overwrite_filter=AlwaysTrue())
 

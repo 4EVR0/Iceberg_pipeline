@@ -11,7 +11,7 @@ Gold 레이어 Iceberg 테이블 초기화 스크립트
 
 import logging
 
-from config.settings import Iceberg, S3
+from config.settings import OliveyoungIceberg, S3
 from gold_pipeline.schemas import (
     GOLD_INGREDIENT_FREQUENCY_PARTITION,
     GOLD_INGREDIENT_FREQUENCY_SCHEMA,
@@ -46,7 +46,7 @@ def _create_table(catalog, identifier: str, schema, partition, sort_order, locat
 def create_gold_ingredient_frequency(catalog) -> None:
     _create_table(
         catalog=catalog,
-        identifier=Iceberg.GOLD_INGREDIENT_FREQUENCY_TABLE,
+        identifier=OliveyoungIceberg.GOLD_INGREDIENT_FREQUENCY_TABLE,
         schema=GOLD_INGREDIENT_FREQUENCY_SCHEMA,
         partition=GOLD_INGREDIENT_FREQUENCY_PARTITION,
         sort_order=GOLD_INGREDIENT_FREQUENCY_SORT,
@@ -57,7 +57,7 @@ def create_gold_ingredient_frequency(catalog) -> None:
 def create_gold_product_change_log(catalog) -> None:
     _create_table(
         catalog=catalog,
-        identifier=Iceberg.GOLD_PRODUCT_CHANGE_LOG_TABLE,
+        identifier=OliveyoungIceberg.GOLD_PRODUCT_CHANGE_LOG_TABLE,
         schema=GOLD_PRODUCT_CHANGE_LOG_SCHEMA,
         partition=GOLD_PRODUCT_CHANGE_LOG_PARTITION,
         sort_order=GOLD_PRODUCT_CHANGE_LOG_SORT,
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    catalog = Iceberg.get_catalog()
+    catalog = OliveyoungIceberg.get_catalog()
 
     if args.table in ("ingredient_frequency", "all"):
         create_gold_ingredient_frequency(catalog)

@@ -36,9 +36,9 @@ _REQUIRED_COLS = [
 
 def _load_history(catalog) -> pd.DataFrame:
     """silver_history 테이블을 pandas DataFrame으로 로드합니다."""
-    from config.settings import Iceberg
+    from config.settings import OliveyoungIceberg
 
-    table = catalog.load_table(Iceberg.SILVER_HISTORY_TABLE)
+    table = catalog.load_table(OliveyoungIceberg.SILVER_HISTORY_TABLE)
     df = (
         table.scan(selected_fields=tuple(_REQUIRED_COLS))
         .to_arrow()

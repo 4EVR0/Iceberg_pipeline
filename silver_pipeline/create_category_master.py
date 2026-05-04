@@ -26,7 +26,7 @@ from pyiceberg.types import NestedField, StringType
 from pyiceberg.partitioning import PartitionSpec
 from pyiceberg.table.sorting import SortOrder
 
-from config.settings import S3, Iceberg
+from config.settings import S3, OliveyoungIceberg
 
 
 # ==========================================
@@ -73,13 +73,13 @@ def build_arrow_table() -> pa.Table:
 
 def create_table_if_not_exists(catalog):
     try:
-        table = catalog.load_table(Iceberg.CATEGORY_MASTER_TABLE)
-        print(f"   이미 존재: {Iceberg.CATEGORY_MASTER_TABLE} (건너뜀)")
+        table = catalog.load_table(OliveyoungIceberg.CATEGORY_MASTER_TABLE)
+        print(f"   이미 존재: {OliveyoungIceberg.CATEGORY_MASTER_TABLE} (건너뜀)")
         return table, False
     except Exception:
         pass
 
-    db = Iceberg.DATABASE
+    db = OliveyoungIceberg.DATABASE
     namespaces = [ns[0] for ns in catalog.list_namespaces()]
     if db not in namespaces:
         try:
@@ -89,20 +89,20 @@ def create_table_if_not_exists(catalog):
             print(f"   네임스페이스 생성 시도 중 참고: {e}")
 
     table = catalog.create_table(
-        identifier     = Iceberg.CATEGORY_MASTER_TABLE,
+        identifier     = OliveyoungIceberg.CATEGORY_MASTER_TABLE,
         schema         = CATEGORY_MASTER_SCHEMA,
         location       = S3.CATEGORY_MASTER_PATH,
         partition_spec = PartitionSpec(),   # 파티셔닝 없음 (행 수가 적음)
         sort_order     = SortOrder(),
     )
-    print(f"   테이블 생성 완료: {Iceberg.CATEGORY_MASTER_TABLE}")
+    print(f"   테이블 생성 완료: {OliveyoungIceberg.CATEGORY_MASTER_TABLE}")
     return table, True
 
 
 def drop_and_recreate(catalog):
     try:
-        catalog.drop_table(Iceberg.CATEGORY_MASTER_TABLE)
-        print(f"   기존 테이블 삭제: {Iceberg.CATEGORY_MASTER_TABLE}")
+        catalog.drop_table(OliveyoungIceberg.CATEGORY_MASTER_TABLE)
+        print(f"   기존 테이블 삭제: {OliveyoungIceberg.CATEGORY_MASTER_TABLE}")
     except Exception:
         pass
     return create_table_if_not_exists(catalog)
@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
     print("=== Category Master 테이블 생성 ===\n")
 
-    catalog = Iceberg.get_catalog()
+    catalog = OliveyoungIceberg.get_catalog()
     fn = drop_and_recreate if args.recreate else create_table_if_not_exists
     table, created = fn(catalog)
 
