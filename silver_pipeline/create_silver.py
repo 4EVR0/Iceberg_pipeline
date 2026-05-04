@@ -19,7 +19,7 @@ if _PROJECT_ROOT not in sys.path:
 
 from pyiceberg.table.sorting import SortOrder
 
-from config.settings import S3, Iceberg
+from config.settings import S3, OliveyoungIceberg
 from silver_pipeline.schemas import (
     SILVER_SCHEMA,
     SILVER_ERROR_SCHEMA,
@@ -84,28 +84,28 @@ if __name__ == "__main__":
 
     print("=== Silver 테이블 생성 ===\n")
 
-    catalog = Iceberg.get_catalog()
+    catalog = OliveyoungIceberg.get_catalog()
     fn = drop_and_recreate if args.recreate else create_table_if_not_exists
 
-    print(f"1. {Iceberg.SILVER_CURRENT_TABLE}")
+    print(f"1. {OliveyoungIceberg.SILVER_CURRENT_TABLE}")
     fn(catalog,
-       table_name     = Iceberg.SILVER_CURRENT_TABLE,
+       table_name     = OliveyoungIceberg.SILVER_CURRENT_TABLE,
        schema         = SILVER_SCHEMA,
        partition_spec = SILVER_PARTITION,
        sort_order     = SILVER_SORT_ORDER,
        location       = S3.SILVER_CURRENT_PATH)
 
-    print(f"\n2. {Iceberg.SILVER_HISTORY_TABLE}")
+    print(f"\n2. {OliveyoungIceberg.SILVER_HISTORY_TABLE}")
     fn(catalog,
-       table_name     = Iceberg.SILVER_HISTORY_TABLE,
+       table_name     = OliveyoungIceberg.SILVER_HISTORY_TABLE,
        schema         = SILVER_SCHEMA,
        partition_spec = SILVER_PARTITION,
        sort_order     = SILVER_SORT_ORDER,
        location       = S3.SILVER_HISTORY_PATH)
 
-    print(f"\n3. {Iceberg.SILVER_ERROR_TABLE}")
+    print(f"\n3. {OliveyoungIceberg.SILVER_ERROR_TABLE}")
     fn(catalog,
-       table_name     = Iceberg.SILVER_ERROR_TABLE,
+       table_name     = OliveyoungIceberg.SILVER_ERROR_TABLE,
        schema         = SILVER_ERROR_SCHEMA,
        partition_spec = SILVER_ERROR_PARTITION,
        sort_order     = SortOrder(),

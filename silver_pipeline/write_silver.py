@@ -14,7 +14,7 @@ import pandas as pd
 import pyarrow as pa
 from pyiceberg.types import StringType, TimestamptzType
 
-from config.settings import S3, Iceberg
+from config.settings import S3, OliveyoungIceberg
 
 
 # ==========================================
@@ -252,28 +252,28 @@ def write_to_iceberg(
     error:
         - error/raw (overwrite): 최신 에러 결과 유지
     """
-    catalog = Iceberg.get_catalog()
+    catalog = OliveyoungIceberg.get_catalog()
 
     if not silver_df.empty:
         # current — overwrite
-        current_table = _load_and_evolve_table(catalog, Iceberg.SILVER_CURRENT_TABLE)
+        current_table = _load_and_evolve_table(catalog, OliveyoungIceberg.SILVER_CURRENT_TABLE)
         current_arrow = _build_arrow_table_for_silver(silver_df, current_table)
         current_table.overwrite(current_arrow)
-        print(f"   Iceberg overwrite 완료: {Iceberg.SILVER_CURRENT_TABLE} ({len(silver_df)}건)")
+        print(f"   Iceberg overwrite 완료: {OliveyoungIceberg.SILVER_CURRENT_TABLE} ({len(silver_df)}건)")
 
         # history — append
-        history_table = _load_and_evolve_table(catalog, Iceberg.SILVER_HISTORY_TABLE)
+        history_table = _load_and_evolve_table(catalog, OliveyoungIceberg.SILVER_HISTORY_TABLE)
         history_arrow = _build_arrow_table_for_silver(silver_df, history_table)
         history_table.append(history_arrow)
-        print(f"   Iceberg append 완료:    {Iceberg.SILVER_HISTORY_TABLE} ({len(silver_df)}건)")
+        print(f"   Iceberg append 완료:    {OliveyoungIceberg.SILVER_HISTORY_TABLE} ({len(silver_df)}건)")
     else:
         print("   silver 데이터 없음 — Iceberg write 건너뜀")
 
     if not error_df.empty:
-        error_table = _load_and_evolve_table(catalog, Iceberg.SILVER_ERROR_TABLE)
+        error_table = _load_and_evolve_table(catalog, OliveyoungIceberg.SILVER_ERROR_TABLE)
         error_arrow = _build_arrow_table_for_error(error_df, error_table)
         error_table.overwrite(error_arrow)
-        print(f"   Iceberg overwrite 완료: {Iceberg.SILVER_ERROR_TABLE} ({len(error_df)}건)")
+        print(f"   Iceberg overwrite 완료: {OliveyoungIceberg.SILVER_ERROR_TABLE} ({len(error_df)}건)")
     else:
         print("   error 데이터 없음 — Iceberg write 건너뜀")
 
@@ -306,13 +306,13 @@ def write_csv_to_s3(silver_df: pd.DataFrame, error_df: pd.DataFrame) -> None:
                 lambda v: str(v) if v is not None else None
             )
 
-        silver_table_name = Iceberg.SILVER_CURRENT_TABLE.split(".")[-1]
+        silver_table_name = OliveyoungIceberg.SILVER_CURRENT_TABLE.split(".")[-1]
         key = f"{prefix}{silver_table_name}_{ts}.csv"
         _upload_csv(csv_df, key)
         print(f"   CSV 저장 완료: s3://{S3.BUCKET}/{key}")
 
     if not error_df.empty:
-        error_table_name = Iceberg.SILVER_ERROR_TABLE.split(".")[-1]
+        error_table_name = OliveyoungIceberg.SILVER_ERROR_TABLE.split(".")[-1]
         key = f"{prefix}{error_table_name}_{ts}.csv"
         _upload_csv(error_df, key)
         print(f"   CSV 저장 완료: s3://{S3.BUCKET}/{key}")

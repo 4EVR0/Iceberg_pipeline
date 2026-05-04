@@ -17,7 +17,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from config.settings import S3, Iceberg
+from config.settings import S3, OliveyoungIceberg
 from reference_pipeline.schemas import (
     TYPO_MAP_SCHEMA,
     GARBAGE_KEYWORDS_SCHEMA,
@@ -80,24 +80,24 @@ if __name__ == "__main__":
 
     print("=== Reference 테이블 생성 ===\n")
 
-    catalog = Iceberg.get_catalog()
+    catalog = OliveyoungIceberg.get_catalog()
     fn = drop_and_recreate if args.recreate else create_table_if_not_exists
 
-    print(f"1. {Iceberg.TYPO_MAP_TABLE}")
+    print(f"1. {OliveyoungIceberg.TYPO_MAP_TABLE}")
     fn(catalog,
-       table_name = Iceberg.TYPO_MAP_TABLE,
+       table_name = OliveyoungIceberg.TYPO_MAP_TABLE,
        schema     = TYPO_MAP_SCHEMA,
        location   = S3.REFERENCE_TYPO_MAP_PATH)
 
-    print(f"\n2. {Iceberg.GARBAGE_KEYWORDS_TABLE}")
+    print(f"\n2. {OliveyoungIceberg.GARBAGE_KEYWORDS_TABLE}")
     fn(catalog,
-       table_name = Iceberg.GARBAGE_KEYWORDS_TABLE,
+       table_name = OliveyoungIceberg.GARBAGE_KEYWORDS_TABLE,
        schema     = GARBAGE_KEYWORDS_SCHEMA,
        location   = S3.REFERENCE_GARBAGE_KEYWORDS_PATH)
 
-    print(f"\n3. {Iceberg.CUSTOM_INGREDIENT_DICT_TABLE}")
+    print(f"\n3. {OliveyoungIceberg.CUSTOM_INGREDIENT_DICT_TABLE}")
     fn(catalog,
-       table_name = Iceberg.CUSTOM_INGREDIENT_DICT_TABLE,
+       table_name = OliveyoungIceberg.CUSTOM_INGREDIENT_DICT_TABLE,
        schema     = CUSTOM_INGREDIENT_DICT_SCHEMA,
        location   = S3.REFERENCE_CUSTOM_INGREDIENT_DICT_PATH)
 

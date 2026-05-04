@@ -19,7 +19,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 import pyarrow as pa
-from config.settings import DataPath, Iceberg
+from config.settings import DataPath, OliveyoungIceberg
 
 
 
@@ -85,7 +85,7 @@ def sync_typo_map(catalog) -> None:
 
     synced_ats = [synced_at] * len(raws)
 
-    table = catalog.load_table(Iceberg.TYPO_MAP_TABLE)
+    table = catalog.load_table(OliveyoungIceberg.TYPO_MAP_TABLE)
     arrow_table = _to_arrow(table, {
         "raw":        pa.array(raws,        type=pa.string()),
         "fix":        pa.array(fixes,       type=pa.string()),
@@ -126,7 +126,7 @@ def sync_garbage_keywords(catalog) -> None:
 
     synced_ats = [synced_at] * len(keywords)
 
-    table = catalog.load_table(Iceberg.GARBAGE_KEYWORDS_TABLE)
+    table = catalog.load_table(OliveyoungIceberg.GARBAGE_KEYWORDS_TABLE)
     arrow_table = _to_arrow(table, {
         "match_type": pa.array(match_types, type=pa.string()),
         "keyword":    pa.array(keywords,    type=pa.string()),
@@ -159,7 +159,7 @@ def sync_custom_ingredient_dict(catalog) -> None:
     add_count      = sum(1 for a in actions if a == "add")
     override_count = sum(1 for a in actions if a == "override")
 
-    table = catalog.load_table(Iceberg.CUSTOM_INGREDIENT_DICT_TABLE)
+    table = catalog.load_table(OliveyoungIceberg.CUSTOM_INGREDIENT_DICT_TABLE)
     arrow_table = _to_arrow(table, {
         "raw":       pa.array(raws,       type=pa.string()),
         "standard":  pa.array(standards,  type=pa.string()),
@@ -180,15 +180,15 @@ def sync_custom_ingredient_dict(catalog) -> None:
 if __name__ == "__main__":
     print("=== Reference Data sync ===\n")
 
-    catalog = Iceberg.get_catalog()
+    catalog = OliveyoungIceberg.get_catalog()
 
-    print(f"[typo] {Iceberg.TYPO_MAP_TABLE}")
+    print(f"[typo] {OliveyoungIceberg.TYPO_MAP_TABLE}")
     sync_typo_map(catalog)
 
-    print(f"\n[garbage] {Iceberg.GARBAGE_KEYWORDS_TABLE}")
+    print(f"\n[garbage] {OliveyoungIceberg.GARBAGE_KEYWORDS_TABLE}")
     sync_garbage_keywords(catalog)
 
-    print(f"\n[custom_ingredient] {Iceberg.CUSTOM_INGREDIENT_DICT_TABLE}")
+    print(f"\n[custom_ingredient] {OliveyoungIceberg.CUSTOM_INGREDIENT_DICT_TABLE}")
     sync_custom_ingredient_dict(catalog)
 
     print("\n=== 완료 ===")
