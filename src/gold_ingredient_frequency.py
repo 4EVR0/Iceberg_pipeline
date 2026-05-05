@@ -4,7 +4,8 @@ from pyiceberg.catalog.glue import GlueCatalog
 import boto3
 from io import StringIO
 import logging
-from datetime import datetime
+
+from cosme_common.batch import build_batch_id
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -105,7 +106,7 @@ def run_gold_ingredient_frequency():
 
         # 5. CSV S3 저장 추가
         s3 = boto3.client('s3')
-        now_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        now_str = build_batch_id()
         csv_file_name = f"{TABLE_NAME}_{now_str}.csv"
         
         csv_buffer = StringIO()
