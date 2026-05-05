@@ -6,6 +6,7 @@ from io import StringIO
 import logging
 
 from cosme_common.batch import build_batch_id
+from cosme_common import s3_paths
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +18,7 @@ def run_gold_ingredient_frequency():
     catalog = GlueCatalog("oliveyoung_catalog", **{
         "s3.region": "ap-northeast-2",
         "uri": "https://glue.ap-northeast-2.amazonaws.com",
-        "warehouse": "s3://oliveyoung-crawl-data/olive_young_gold/"
+        "warehouse": s3_paths.GOLD_PATH,
     })
 
     DATABASE_NAME = "oliveyoung_db"
@@ -113,11 +114,11 @@ def run_gold_ingredient_frequency():
         gold_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
         
         s3.put_object(
-            Bucket='oliveyoung-crawl-data',
+            Bucket=s3_paths.BUCKET,
             Key=f"{GOLD_CSV_PATH}{csv_file_name}",
             Body=csv_buffer.getvalue()
         )
-        logger.info(f"Gold 집계 결과 CSV 백업 완료: s3://oliveyoung-crawl-data/{GOLD_CSV_PATH}{csv_file_name}")
+        logger.info(f"Gold 집계 결과 CSV 백업 완료: s3://{s3_paths.BUCKET}/{GOLD_CSV_PATH}{csv_file_name}")
 
     except Exception as e:
         logger.error(f"오류 발생: {e}")

@@ -9,6 +9,8 @@ import os
 import duckdb
 from pyiceberg.catalog import load_catalog
 
+from cosme_common import s3_paths
+
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Iceberg_pipeline/
 
 
@@ -17,31 +19,35 @@ _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Icebe
 # ==========================================
 class S3:
     REGION = "ap-northeast-2"
-    BUCKET = "oliveyoung-crawl-data"
+    BUCKET = s3_paths.BUCKET
 
     # Bronze: s3://.../oliveyoung/main_category/sub_category/run_id=YYYYMMDD_HHMMSS/part_*.json
-    BRONZE_PREFIX       = "oliveyoung"
-    BRONZE_GLOB_PATTERN = f"s3://{BUCKET}/{BRONZE_PREFIX}/*/*/run_id=*/*.json"
+    BRONZE_PREFIX = s3_paths.BRONZE_PREFIX
+    BRONZE_GLOB   = s3_paths.BRONZE_GLOB
+
+    # KCIA: INCI_data_silver/kcia_cosing/batch=YYYY-MM/kcia_cosing_matched_final.csv
+    KCIA_PREFIX = s3_paths.KCIA_PREFIX
+    KCIA_GLOB   = s3_paths.KCIA_GLOB
 
     # Silver
-    SILVER_CURRENT_PATH  = f"s3://{BUCKET}/silver/current/"
-    SILVER_HISTORY_PATH  = f"s3://{BUCKET}/silver/history/"
-    SILVER_ERROR_PATH    = f"s3://{BUCKET}/silver/error/raw/"
-    CATEGORY_MASTER_PATH = f"s3://{BUCKET}/olive_young_category_master/"
+    SILVER_CURRENT_PATH  = s3_paths.SILVER_CURRENT_PATH
+    SILVER_HISTORY_PATH  = s3_paths.SILVER_HISTORY_PATH
+    SILVER_ERROR_PATH    = s3_paths.SILVER_ERROR_PATH
+    CATEGORY_MASTER_PATH = s3_paths.CATEGORY_MASTER_PATH
 
     # Gold
-    GOLD_PATH = f"s3://{BUCKET}/olive_young_gold/"
+    GOLD_PATH = s3_paths.GOLD_PATH
 
     # Iceberg 메타데이터
-    ICEBERG_METADATA_PATH = f"s3://{BUCKET}/olive_young_iceberg_metadata/"
+    ICEBERG_METADATA_PATH = s3_paths.ICEBERG_METADATA_PATH
 
     # 처리 결과 CSV 저장 (조회용)
-    DATA_CSV_PATH = f"s3://{BUCKET}/data_csv/"
+    DATA_CSV_PATH = s3_paths.DATA_CSV_PATH
 
     # Reference Data (typo_map, garbage_keywords, custom_ingredient_dict)
-    REFERENCE_TYPO_MAP_PATH               = f"s3://{BUCKET}/reference/typo_map/"
-    REFERENCE_GARBAGE_KEYWORDS_PATH       = f"s3://{BUCKET}/reference/garbage_keywords/"
-    REFERENCE_CUSTOM_INGREDIENT_DICT_PATH = f"s3://{BUCKET}/reference/custom_ingredient_dict/"
+    REFERENCE_TYPO_MAP_PATH               = f"s3://{s3_paths.BUCKET}/reference/typo_map/"
+    REFERENCE_GARBAGE_KEYWORDS_PATH       = f"s3://{s3_paths.BUCKET}/reference/garbage_keywords/"
+    REFERENCE_CUSTOM_INGREDIENT_DICT_PATH = f"s3://{s3_paths.BUCKET}/reference/custom_ingredient_dict/"
 
 
 # ==========================================
@@ -118,6 +124,7 @@ class INCIIceberg:
 class DataPath:
     DATA_DIR                     = os.path.join(_BASE_DIR, "data")
     KCIA_CSV                     = os.path.join(DATA_DIR, "kcia_ingredient_dict2.csv")
+    KCIA_MAPPING_JSON            = os.path.join(DATA_DIR, "kcia_mapping_dict.json")
     TYPO_MAP_JSON                = os.path.join(DATA_DIR, "typo_map.json")
     TYPO_MAP_REGEX_JSON          = os.path.join(DATA_DIR, "typo_map_regex.json")
     GARBAGE_KEYWORDS_JSON        = os.path.join(DATA_DIR, "garbage_keywords.json")
@@ -147,6 +154,13 @@ class DuckDB:
         S3 구조:
             oliveyoung/{main_category}/{sub_category}/run_id={YYYYMMDD_HHMMSS}/{part_*.json}
 
+
+        동작:
+            1. BRONZE_GLOB으로 전체 파일 목록 조회
+            2. sub_category별 max(run_id) 선택  ← 문자열 정렬로 최신값 결정
+            3. 최신 run_id에 해당하는 파일 경로만 반환
+
+
         Returns:
             list[str]: 최신 run_id 파일 경로 목록
 
@@ -160,7 +174,7 @@ class DuckDB:
                     regexp_extract(file, '/([^/]+)/([^/]+)/run_id=([^/]+)/', 1) AS main_category,
                     regexp_extract(file, '/([^/]+)/([^/]+)/run_id=([^/]+)/', 2) AS sub_category,
                     regexp_extract(file, 'run_id=([^/]+)/',                  1) AS run_id
-                FROM glob('{S3.BRONZE_GLOB_PATTERN}')
+                FROM glob('{S3.BRONZE_GLOB}')
             ),
             latest_runs AS (
                 SELECT sub_category, max(run_id) AS latest_run_id
@@ -178,9 +192,44 @@ class DuckDB:
         if df.empty:
             raise RuntimeError(
                 f"S3에서 bronze 파일을 찾지 못했습니다.\n"
-                f"패턴: {S3.BRONZE_GLOB_PATTERN}"
+                f"패턴: {S3.BRONZE_GLOB}"
             )
 
         files = df["file"].tolist()
         print(f"   최신 run_id 파일 {len(files)}개 선택됨")
         return files
+
+
+    @staticmethod
+    def get_latest_kcia_s3_path(con: duckdb.DuckDBPyConnection) -> str:
+        """
+        S3에서 batch=YYYY-MM 파티션 중 가장 최신 batch의 KCIA CSV 경로를 반환합니다.
+
+        S3 구조:
+            INCI_data_silver/kcia_cosing/batch=YYYY-MM/kcia_cosing_matched_final.csv
+
+        Returns:
+            str: 최신 batch CSV의 S3 경로
+
+        Raises:
+            RuntimeError: S3에서 파일을 찾지 못한 경우
+        """
+        df = con.execute(f"""
+            SELECT
+                file,
+                regexp_extract(file, 'batch=([^/]+)/', 1) AS batch_id
+            FROM glob('{S3.KCIA_GLOB}')
+            ORDER BY batch_id DESC
+            LIMIT 1
+        """).df()
+
+        if df.empty:
+            raise RuntimeError(
+                f"S3에서 KCIA CSV 파일을 찾지 못했습니다.\n"
+                f"패턴: {S3.KCIA_GLOB}"
+            )
+
+        path = df['file'].iloc[0]
+        batch_id = df['batch_id'].iloc[0]
+        print(f"   KCIA 최신 batch: {batch_id} ({path})")
+        return path
