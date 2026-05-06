@@ -10,11 +10,11 @@ Gold 파이프라인 오케스트레이션 진입점
 """
 
 import logging
-from datetime import datetime, timezone
 
 from config.settings import OliveyoungIceberg
 from gold_pipeline.cdc import compute_change_log
 from gold_pipeline.write_gold import write_gold_change_log, write_gold_ingredient_frequency
+from models.batch_metadata import create_batch_metadata
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,10 +24,9 @@ logger = logging.getLogger(__name__)
 
 
 def run_gold_pipeline() -> None:
-    batch_date = datetime.now(timezone.utc)
-    batch_job  = batch_date.strftime("%Y%m%d_%H%M%S")
+    batch = create_batch_metadata()
 
-    logger.info(f"=== Gold Pipeline 시작: batch_job={batch_job} ===")
+    logger.info(f"=== Gold Pipeline 시작: batch_job={batch.batch_job} ===")
 
     catalog = OliveyoungIceberg.get_catalog()
 
@@ -36,7 +35,7 @@ def run_gold_pipeline() -> None:
     # ----------------------------------------
     logger.info("[Step 1] CDC — silver_history 변경 분석")
     try:
-        change_df = compute_change_log(catalog, batch_job=batch_job)
+        change_df = compute_change_log(catalog, batch=batch)
         write_gold_change_log(catalog, change_df)
     except Exception as e:
         logger.error(f"CDC 실패: {e}", exc_info=True)
@@ -47,12 +46,12 @@ def run_gold_pipeline() -> None:
     # ----------------------------------------
     logger.info("[Step 2] 성분 빈도 집계 — silver_current → gold_ingredient_frequency")
     try:
-        write_gold_ingredient_frequency(catalog, batch_job=batch_job, batch_date=batch_date)
+        write_gold_ingredient_frequency(catalog, batch=batch)
     except Exception as e:
         logger.error(f"성분 빈도 집계 실패: {e}", exc_info=True)
         raise
 
-    logger.info(f"=== Gold Pipeline 완료: batch_job={batch_job} ===")
+    logger.info(f"=== Gold Pipeline 완료: batch_job={batch.batch_job} ===")
 
 
 if __name__ == "__main__":

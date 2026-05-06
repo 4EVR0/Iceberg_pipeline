@@ -12,13 +12,13 @@
 
 import re
 import uuid
-from datetime import datetime, timezone
 
 import pandas as pd
 import ahocorasick
 
 from src.bronze_to_silver.ac_builder import search_with_ac
 from models.pipeline_models import ErrorRecord
+from models.batch_metadata import BatchMetadata, add_batch_metadata, create_batch_metadata
 
 
 # ==========================================
@@ -651,6 +651,7 @@ def process_pipeline(
     typo_regex_list: list[dict],
     garbage_config: dict = None,
     product_name_norm_list: list[dict] = None,
+    batch: BatchMetadata = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Bronze raw DataFrame을 받아 silver / error DataFrame으로 전처리합니다.
@@ -671,8 +672,7 @@ def process_pipeline(
     Returns:
         (silver_df, error_df)
     """
-    batch_job  = "oliveyoung_bronze_to_silver_process"
-    batch_date = datetime.now(timezone.utc)
+    batch = batch or create_batch_metadata()
 
     # product_name_norm 패턴 컴파일 (한 번만)
     norm_compiled = _compile_product_name_norms(product_name_norm_list or [])
@@ -683,7 +683,9 @@ def process_pipeline(
     )
 
     if not interim_list:
-        return pd.DataFrame(), pd.DataFrame([r.to_dict() for r in error_records])
+        error_df = pd.DataFrame([r.to_dict() for r in error_records])
+        add_batch_metadata(error_df, batch)
+        return pd.DataFrame(), error_df
 
     # [Step 10] 중복 제거
     deduped_df, duplicate_errors = _dedup_interim(interim_list)
@@ -697,8 +699,6 @@ def process_pipeline(
     error_df  = pd.DataFrame([r.to_dict() for r in error_records])
 
     for df_ in (silver_df, error_df):
-        if not df_.empty:
-            df_["batch_job"]  = batch_job
-            df_["batch_date"] = pd.Timestamp(batch_date)
+        add_batch_metadata(df_, batch)
 
     return silver_df, error_df

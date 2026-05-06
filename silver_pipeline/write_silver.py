@@ -6,7 +6,6 @@ Silver / Silver Error 테이블 Iceberg write + CSV 저장 모듈
 """
 
 import io
-from datetime import datetime, timezone
 from typing import Any
 
 import boto3
@@ -15,6 +14,7 @@ import pyarrow as pa
 from pyiceberg.types import StringType, TimestamptzType
 
 from config.settings import S3, OliveyoungIceberg
+from models.batch_metadata import create_batch_metadata
 
 
 # ==========================================
@@ -23,7 +23,7 @@ from config.settings import S3, OliveyoungIceberg
 
 def _now_ts() -> str:
     """UTC 기준 타임스탬프 문자열 반환. 예) 20260318_153042"""
-    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return create_batch_metadata().batch_job
 
 
 def _upload_csv(df: pd.DataFrame, s3_key: str) -> None:
