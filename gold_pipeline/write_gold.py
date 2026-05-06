@@ -6,13 +6,13 @@ Gold 레이어 Iceberg write 모듈
 """
 
 import logging
-from datetime import datetime
 
 import duckdb
 import pandas as pd
 import pyarrow as pa
 
 from config.settings import OliveyoungIceberg
+from models.batch_metadata import BatchMetadata, add_batch_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -103,14 +103,13 @@ ORDER BY category_id, rank
 """
 
 
-def write_gold_ingredient_frequency(catalog, batch_job: str, batch_date: datetime) -> None:
+def write_gold_ingredient_frequency(catalog, batch: BatchMetadata) -> None:
     """
     silver_current 데이터를 집계하여 gold_ingredient_frequency 에 append 합니다.
 
     Args:
         catalog   : pyiceberg Catalog 인스턴스
-        batch_job : 배치 식별자 (예: "20260409_153042")
-        batch_date: 배치 기준 시각 (UTC datetime)
+        batch: 현재 배치 메타데이터
     """
     logger.info("silver_current 로드 중...")
     silver_table = catalog.load_table(OliveyoungIceberg.SILVER_CURRENT_TABLE)
@@ -123,8 +122,7 @@ def write_gold_ingredient_frequency(catalog, batch_job: str, batch_date: datetim
 
     logger.info(f"성분 빈도 집계 완료: {len(gold_df)}건")
 
-    gold_df["batch_job"]  = batch_job
-    gold_df["batch_date"] = pd.Timestamp(batch_date, tz="UTC")
+    add_batch_metadata(gold_df, batch)
 
     gold_table  = catalog.load_table(OliveyoungIceberg.GOLD_INGREDIENT_FREQUENCY_TABLE)
     arrow_table = _build_arrow(gold_df, gold_table)

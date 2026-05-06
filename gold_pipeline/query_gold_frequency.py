@@ -7,12 +7,15 @@ oliveyoung_db.gold_ingredient_frequency: 카테고리별 성분 top 50
 from pyiceberg.catalog.glue import GlueCatalog
 import pandas as pd
 
+from cosme_common import s3_paths
+
+
 def query_all_categories_frequency(top_n=10):
     # 1. 카탈로그 연결
     catalog = GlueCatalog("oliveyoung_catalog", **{
         "s3.region": "ap-northeast-2",
         "uri": "https://glue.ap-northeast-2.amazonaws.com",
-        "warehouse": "s3://oliveyoung-crawl-data/olive_young_gold/"
+        "warehouse": s3_paths.GOLD_PATH,
     })
 
     # 2. 테이블 로드

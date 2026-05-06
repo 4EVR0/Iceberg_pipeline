@@ -1,137 +1,167 @@
 """
-CDC (Change Data Capture) 모듈
+CDC (Change Data Capture) 모듈 — Iceberg 스냅샷 비교 방식
 
-silver_history에서 최신 2개 batch_date 스냅샷을 비교해
-product 엔터티 기준 변경분(NEW / REMOVED)을 추출합니다.
+전체 테이블 스캔 없이 Iceberg 스냅샷 메타데이터를 활용해 변경분을 추출합니다.
 
 흐름:
-    1. silver_history 전체 스캔 → pandas
-    2. 최신 2개 batch_date 추출 (prev, curr)
-    3. product_id 집합 비교
-       - NEW     : curr에 있고 prev에 없는 product
-       - REMOVED : prev에 있고 curr에 없는 product
-    4. 변경 레코드 DataFrame 반환 (write_gold.py 에서 Iceberg append)
+    NEW     : silver_history의 마지막 2 스냅샷 사이에 추가된 delta 파일만 읽기
+              → append된 레코드 = 이번 배치에 신규 등장한 product
+    REMOVED : silver_current의 이전 스냅샷 vs 현재 스냅샷 product_id 집합 비교
+              → silver_current는 overwrite라 항상 현재 배치 크기만큼만 읽힘
 
 반환:
-    pd.DataFrame | None
-        변경 레코드가 없으면 None 반환
+    pd.DataFrame | None — 변경 레코드가 없으면 None
 """
 
 import logging
 
 import pandas as pd
 
+from config.settings import OliveyoungIceberg as Iceberg
+from models.batch_metadata import BatchMetadata, add_batch_metadata
+
 logger = logging.getLogger(__name__)
 
-# silver_history에서 CDC에 필요한 컬럼만 선택
-_REQUIRED_COLS = [
-    "batch_date",
+_SELECTED_FIELDS = (
     "product_id",
     "category_id",
     "product_name",
     "product_brand",
     "product_ingredients",
-]
+    "batch_date",
+)
 
 
-def _load_history(catalog) -> pd.DataFrame:
-    """silver_history 테이블을 pandas DataFrame으로 로드합니다."""
-    from config.settings import OliveyoungIceberg
+# ==========================================
+# 스냅샷 유틸
+# ==========================================
 
-    table = catalog.load_table(OliveyoungIceberg.SILVER_HISTORY_TABLE)
-    df = (
-        table.scan(selected_fields=tuple(_REQUIRED_COLS))
-        .to_arrow()
-        .to_pandas()
-    )
-    logger.info(f"silver_history 로드: {len(df)}건")
-    return df
-
-
-def _pick_two_latest_batch_dates(df: pd.DataFrame) -> tuple[pd.Timestamp, pd.Timestamp] | None:
+def _latest_two_snapshot_ids(table) -> tuple[int, int] | None:
     """
-    DataFrame에서 batch_date 컬럼 기준 최신 2개 날짜를 반환합니다.
-
-    Returns:
-        (prev_date, curr_date) 또는 스냅샷이 1개 이하이면 None
+    테이블 히스토리에서 최신 2개 snapshot_id를 (prev, curr) 순으로 반환합니다.
+    스냅샷이 2개 미만이면 None 반환.
     """
-    dates = (
-        df["batch_date"]
-        .dropna()
-        .drop_duplicates()
-        .sort_values(ascending=False)
-        .reset_index(drop=True)
-    )
+    history = sorted(table.history(), key=lambda h: h.timestamp_ms)
 
-    if len(dates) < 2:
+    if len(history) < 2:
         logger.warning(
-            f"silver_history 스냅샷이 {len(dates)}개뿐입니다. "
-            "CDC를 실행하려면 최소 2개의 batch_date가 필요합니다."
+            f"{table.name()} 스냅샷이 {len(history)}개뿐입니다. "
+            "CDC를 실행하려면 최소 2개의 스냅샷이 필요합니다."
         )
         return None
 
-    curr_date = dates.iloc[0]
-    prev_date = dates.iloc[1]
-    logger.info(f"비교 대상 — prev: {prev_date}  curr: {curr_date}")
-    return prev_date, curr_date
+    prev_snapshot_id = history[-2].snapshot_id
+    curr_snapshot_id = history[-1].snapshot_id
+    logger.info(
+        f"{table.name()} 스냅샷 비교 — "
+        f"prev={prev_snapshot_id}  curr={curr_snapshot_id}"
+    )
+    return prev_snapshot_id, curr_snapshot_id
 
 
-def compute_change_log(catalog, batch_job: str) -> pd.DataFrame | None:
+# ==========================================
+# NEW: silver_history 증분 스캔
+# ==========================================
+
+def _get_new_products(catalog) -> pd.DataFrame:
     """
-    silver_history 최신 2개 스냅샷을 비교하여 변경 레코드 DataFrame을 반환합니다.
+    silver_history의 마지막 두 스냅샷 사이에 추가된 delta 파일만 읽어
+    이번 배치에 신규 등장한 product를 반환합니다.
 
-    Args:
-        catalog  : pyiceberg Catalog 인스턴스
-        batch_job: 현재 배치 식별자 (gold_product_change_log.batch_job 컬럼에 기록)
-
-    Returns:
-        변경 레코드 DataFrame(컬럼: batch_date, product_id, category_id, change_type,
-                              product_name, product_brand, product_ingredients, batch_job)
-        변경 레코드가 없으면 None
+    pyiceberg incremental scan은 from_snapshot_id ~ to_snapshot_id 구간에
+    추가된 데이터 파일만 읽으므로 전체 history 스캔이 발생하지 않습니다.
     """
-    history_df = _load_history(catalog)
+    table = catalog.load_table(Iceberg.SILVER_HISTORY_TABLE)
 
-    result = _pick_two_latest_batch_dates(history_df)
+    result = _latest_two_snapshot_ids(table)
     if result is None:
-        return None
+        return pd.DataFrame()
 
-    prev_date, curr_date = result
+    prev_snapshot_id, curr_snapshot_id = result
 
-    prev_df = history_df[history_df["batch_date"] == prev_date].copy()
-    curr_df = history_df[history_df["batch_date"] == curr_date].copy()
+    delta_arrow = table.scan(
+        from_snapshot_id=prev_snapshot_id,
+        to_snapshot_id=curr_snapshot_id,
+        selected_fields=_SELECTED_FIELDS,
+    ).to_arrow()
+
+    new_df = delta_arrow.to_pandas()
+    new_df["change_type"] = "NEW"
+    logger.info(f"NEW 후보: {len(new_df)}건 (delta 파일에서 읽음)")
+    return new_df
+
+
+# ==========================================
+# REMOVED: silver_current 스냅샷 비교
+# ==========================================
+
+def _get_removed_products(catalog) -> pd.DataFrame:
+    """
+    silver_current의 이전 스냅샷과 현재 스냅샷을 비교해
+    사라진 product를 반환합니다.
+
+    silver_current는 배치마다 overwrite되므로 항상 현재 배치 크기만큼만
+    읽히고, 전체 history 누적 부담이 없습니다.
+    """
+    table = catalog.load_table(Iceberg.SILVER_CURRENT_TABLE)
+
+    result = _latest_two_snapshot_ids(table)
+    if result is None:
+        return pd.DataFrame()
+
+    prev_snapshot_id, curr_snapshot_id = result
+
+    prev_df = (
+        table.scan(snapshot_id=prev_snapshot_id, selected_fields=_SELECTED_FIELDS)
+        .to_arrow()
+        .to_pandas()
+    )
+    curr_df = (
+        table.scan(snapshot_id=curr_snapshot_id, selected_fields=_SELECTED_FIELDS)
+        .to_arrow()
+        .to_pandas()
+    )
 
     prev_ids = set(prev_df["product_id"].dropna())
     curr_ids = set(curr_df["product_id"].dropna())
-
-    new_ids     = curr_ids - prev_ids
     removed_ids = prev_ids - curr_ids
 
-    logger.info(f"NEW: {len(new_ids)}건  REMOVED: {len(removed_ids)}건")
+    if not removed_ids:
+        logger.info("REMOVED: 0건")
+        return pd.DataFrame()
 
-    if not new_ids and not removed_ids:
+    removed_df = prev_df[prev_df["product_id"].isin(removed_ids)].copy()
+    removed_df["change_type"] = "REMOVED"
+    logger.info(f"REMOVED: {len(removed_df)}건")
+    return removed_df
+
+
+# ==========================================
+# 진입점
+# ==========================================
+
+def compute_change_log(catalog, batch: BatchMetadata) -> pd.DataFrame | None:
+    """
+    silver_history / silver_current Iceberg 스냅샷을 비교해
+    변경 레코드 DataFrame을 반환합니다.
+
+    Args:
+        catalog  : pyiceberg Catalog 인스턴스
+        batch: 현재 배치 메타데이터
+
+    Returns:
+        변경 레코드 DataFrame 또는 변경 없으면 None
+    """
+    new_df     = _get_new_products(catalog)
+    removed_df = _get_removed_products(catalog)
+
+    if new_df.empty and removed_df.empty:
         logger.info("변경 레코드 없음 — CDC 건너뜀")
         return None
 
-    rows = []
+    change_df = pd.concat([new_df, removed_df], ignore_index=True)
+    add_batch_metadata(change_df, batch)
 
-    # NEW: curr 스냅샷에서 해당 product 정보 가져오기
-    if new_ids:
-        new_df = curr_df[curr_df["product_id"].isin(new_ids)].copy()
-        new_df["change_type"] = "NEW"
-        new_df["batch_date"]  = curr_date
-        rows.append(new_df)
-
-    # REMOVED: prev 스냅샷에서 해당 product 정보 가져오기
-    if removed_ids:
-        removed_df = prev_df[prev_df["product_id"].isin(removed_ids)].copy()
-        removed_df["change_type"] = "REMOVED"
-        removed_df["batch_date"]  = curr_date  # 로그 기록 시점은 현재 배치 기준
-        rows.append(removed_df)
-
-    change_df = pd.concat(rows, ignore_index=True)
-    change_df["batch_job"] = batch_job
-
-    # gold_product_change_log 스키마 컬럼 순서에 맞게 정렬
     output_cols = [
         "batch_date",
         "product_id",
@@ -144,5 +174,7 @@ def compute_change_log(catalog, batch_job: str) -> pd.DataFrame | None:
     ]
     change_df = change_df[output_cols].reset_index(drop=True)
 
-    logger.info(f"CDC 변경 레코드 생성: {len(change_df)}건")
+    new_cnt     = (change_df["change_type"] == "NEW").sum()
+    removed_cnt = (change_df["change_type"] == "REMOVED").sum()
+    logger.info(f"CDC 완료 — NEW={new_cnt}건  REMOVED={removed_cnt}건")
     return change_df

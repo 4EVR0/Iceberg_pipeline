@@ -8,6 +8,8 @@ from pyiceberg.schema import Schema
 from pyiceberg.types import StringType, IntegerType, LongType, NestedField
 import logging
 
+from cosme_common import s3_paths
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ def create_gold_table():
     catalog = GlueCatalog("oliveyoung_catalog", **{
         "s3.region": "ap-northeast-2",
         "uri": "https://glue.ap-northeast-2.amazonaws.com",
-        "warehouse": "s3://oliveyoung-crawl-data/olive_young_gold/"
+        "warehouse": s3_paths.GOLD_PATH,
     })
 
     # 2. 스키마 정의 (TOP 50 집계 목적에 최적화)
@@ -37,7 +39,7 @@ def create_gold_table():
         catalog.create_table(
             identifier=table_identifier,
             schema=schema,
-            location="s3://oliveyoung-crawl-data/olive_young_gold/gold_ingredient_frequency"
+            location=f"{s3_paths.GOLD_PATH}gold_ingredient_frequency",
         )
         logger.info(f"성공적으로 테이블을 생성했습니다: {table_identifier}")
         
