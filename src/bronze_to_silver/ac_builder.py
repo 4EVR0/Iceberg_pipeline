@@ -7,6 +7,9 @@ KCIA 성분 사전 빌드 및 Aho-Corasick 오토마타 모듈
     - Aho-Corasick 오토마타 빌드 및 탐색
 """
 
+import json
+import os
+
 import pandas as pd
 import ahocorasick
 
@@ -16,6 +19,18 @@ from config.settings import OliveyoungIceberg, INCIIceberg
 # ==========================================
 # 1. KCIA 매핑 딕셔너리 생성
 # ==========================================
+
+_STD_NAME_CANDIDATES = ["std_name_ko", "inci_std_name_ko", "standard_name_ko", "kor_name"]
+_OLD_NAME_CANDIDATES = ["old_name_ko", "inci_old_name_ko", "korean_name"]
+
+
+def _resolve_column(df_columns: list[str], candidates: list[str]) -> str | None:
+    """candidates 중 df_columns에 존재하는 첫 번째 항목을 반환한다. 없으면 None."""
+    for c in candidates:
+        if c in df_columns:
+            return c
+    return None
+
 
 def _kcia_add(mapping: dict, name: str, std_name: str) -> None:
     """name을 마스킹/공백제거하여 mapping에 std_name으로 등록합니다."""
@@ -45,16 +60,88 @@ def generate_kcia_mapping_dict(inci_catalog) -> dict:
         dict: {검색키: 표준명칭}
     """
     table = inci_catalog.load_table(INCIIceberg.SILVER_GRAPHRAG_CURRENT_TABLE)
-    df = table.scan(selected_fields=("std_name_ko", "old_name_ko")).to_arrow().to_pandas()
+    df = table.scan().to_arrow().to_pandas()
+
+    cols = list(df.columns)
+    std_col = _resolve_column(cols, _STD_NAME_CANDIDATES)
+    if std_col is None:
+        raise ValueError(
+            f"표준명 컬럼을 찾지 못했습니다. "
+            f"후보: {_STD_NAME_CANDIDATES}, 실제 컬럼: {cols}"
+        )
+    old_col = _resolve_column(cols, _OLD_NAME_CANDIDATES)
 
     mapping = {}
     for _, row in df.iterrows():
-        if pd.isna(row.get("std_name_ko")):
+        if pd.isna(row.get(std_col)):
             continue
-        std_name = str(row["std_name_ko"]).strip()
+        std_name = str(row[std_col]).strip()
         _kcia_add(mapping, std_name, std_name)
-        _kcia_add(mapping, row.get("old_name_ko"), std_name)
+        if old_col:
+            _kcia_add(mapping, row.get(old_col), std_name)
 
+    return mapping
+
+
+def load_kcia_mapping_dict(csv_path: str, json_cache_path: str) -> dict:
+    """
+    S3 또는 로컬 KCIA CSV에서 매핑 딕셔너리를 로드한다.
+
+    JSON 캐시가 존재하고 _source_path 가 csv_path 와 일치하면 캐시를 반환한다.
+    _source_path 불일치 시 CSV를 재읽고 캐시를 갱신한다.
+    캐시 파일은 S3 접근 불가 시 비상 폴백으로 유지된다.
+
+    Args:
+        csv_path: KCIA CSV 경로 (S3 URI 또는 로컬 경로)
+        json_cache_path: JSON 캐시 파일 경로
+
+    Returns:
+        dict: {검색키: 표준명칭}
+    """
+    if os.path.exists(json_cache_path):
+        try:
+            with open(json_cache_path, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            if cached.get("_source_path") == csv_path:
+                mapping = {k: v for k, v in cached.items() if k != "_source_path"}
+                print(f"   KCIA 캐시 히트: {len(mapping)}개 키워드 ({json_cache_path})")
+                return mapping
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    df = pd.read_csv(csv_path, dtype=str)
+    cols = list(df.columns)
+
+    std_col = _resolve_column(cols, _STD_NAME_CANDIDATES)
+    if std_col is None:
+        raise ValueError(
+            f"표준명 컬럼을 찾지 못했습니다. "
+            f"후보: {_STD_NAME_CANDIDATES}, 실제 컬럼: {cols}"
+        )
+    old_col = _resolve_column(cols, _OLD_NAME_CANDIDATES)
+
+    mapping = {}
+    for _, row in df.iterrows():
+        val = row.get(std_col)
+        if pd.isna(val) or str(val).strip() in ("", "nan"):
+            continue
+        std_name = str(val).strip()
+        _kcia_add(mapping, std_name, std_name)
+        if old_col:
+            _kcia_add(mapping, row.get(old_col), std_name)
+
+    cache_data = {**mapping, "_source_path": csv_path}
+    try:
+        cache_dir = os.path.dirname(json_cache_path)
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
+        with open(json_cache_path, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f, ensure_ascii=False)
+        print(f"   KCIA 캐시 갱신: {json_cache_path}")
+    except OSError as e:
+        print(f"   [WARN] 캐시 저장 실패: {e}")
+
+    print(f"   KCIA CSV 로드 완료: {len(mapping)}개 키워드")
     return mapping
  
  
