@@ -14,7 +14,7 @@ import pyarrow as pa
 from pyiceberg.types import StringType, TimestamptzType
 
 from config.settings import S3, OliveyoungIceberg
-from models.batch_metadata import create_batch_metadata
+from oliveyoung_common.batch import build_run_id
 
 
 # ==========================================
@@ -22,8 +22,8 @@ from models.batch_metadata import create_batch_metadata
 # ==========================================
 
 def _now_ts() -> str:
-    """UTC 기준 타임스탬프 문자열 반환. 예) 20260318_153042"""
-    return create_batch_metadata().batch_job
+    """UTC 기준 run_id 문자열 반환. 예) oliveyoung_silver_20260318_153042"""
+    return build_run_id("oliveyoung_silver")
 
 
 def _upload_csv(df: pd.DataFrame, s3_key: str) -> None:

@@ -5,7 +5,7 @@ import boto3
 from io import StringIO
 import logging
 
-from oliveyoung_common.batch import build_batch_id
+from oliveyoung_common.batch import build_run_id
 from oliveyoung_common.logging import job_unit
 from oliveyoung_common import s3_paths
 
@@ -127,7 +127,7 @@ def _run_gold_ingredient_frequency(run_id: str):
 
 
 def run_gold_ingredient_frequency():
-    run_id = build_batch_id()
+    run_id = build_run_id("gold_ingredient_frequency")
     with job_unit(logger, job="gold_ingredient_frequency", run_id=run_id):
         _run_gold_ingredient_frequency(run_id=run_id)
 

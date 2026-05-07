@@ -672,7 +672,7 @@ def process_pipeline(
     Returns:
         (silver_df, error_df)
     """
-    batch = batch or create_batch_metadata()
+    batch = batch or create_batch_metadata("bronze_to_silver")
 
     # product_name_norm 패턴 컴파일 (한 번만)
     norm_compiled = _compile_product_name_norms(product_name_norm_list or [])

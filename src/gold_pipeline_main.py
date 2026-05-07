@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_gold_pipeline() -> None:
-    batch = create_batch_metadata()
+    batch = create_batch_metadata("gold_pipeline")
 
     logger.info(f"=== Gold Pipeline 시작: batch_job={batch.batch_job} ===")
 
