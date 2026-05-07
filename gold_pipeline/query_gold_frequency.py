@@ -7,7 +7,7 @@ oliveyoung_db.gold_ingredient_frequency: 카테고리별 성분 top 50
 from pyiceberg.catalog.glue import GlueCatalog
 import pandas as pd
 
-from cosme_common import s3_paths
+from oliveyoung_common import s3_paths
 
 
 def query_all_categories_frequency(top_n=10):
