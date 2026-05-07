@@ -8,7 +8,7 @@ from pyiceberg.schema import Schema
 from pyiceberg.types import StringType, IntegerType, LongType, NestedField
 import logging
 
-from cosme_common import s3_paths
+from oliveyoung_common import s3_paths
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

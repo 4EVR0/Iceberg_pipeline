@@ -5,9 +5,9 @@ import boto3
 from io import StringIO
 import logging
 
-from cosme_common.batch import build_batch_id
-from cosme_common.logging import job_unit
-from cosme_common import s3_paths
+from oliveyoung_common.batch import build_batch_id
+from oliveyoung_common.logging import job_unit
+from oliveyoung_common import s3_paths
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)

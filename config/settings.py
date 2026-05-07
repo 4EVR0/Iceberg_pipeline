@@ -9,7 +9,7 @@ import os
 import duckdb
 from pyiceberg.catalog import load_catalog
 
-from cosme_common import s3_paths
+from oliveyoung_common import s3_paths
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Iceberg_pipeline/
 
