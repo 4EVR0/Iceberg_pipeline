@@ -6,13 +6,15 @@ from io import StringIO
 import logging
 
 from cosme_common.batch import build_batch_id
+from cosme_common.logging import job_unit
 from cosme_common import s3_paths
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def run_gold_ingredient_frequency():
+
+def _run_gold_ingredient_frequency(run_id: str):
     # 1. 카탈로그 연결 (실버 데이터 로드 및 골드 적재 공용)
     # warehouse 경로는 테이블 생성 시 설정한 경로와 일치해야 합니다.
     catalog = GlueCatalog("oliveyoung_catalog", **{
@@ -107,8 +109,7 @@ def run_gold_ingredient_frequency():
 
         # 5. CSV S3 저장 추가
         s3 = boto3.client('s3')
-        now_str = build_batch_id()
-        csv_file_name = f"{TABLE_NAME}_{now_str}.csv"
+        csv_file_name = f"{TABLE_NAME}_{run_id}.csv"
         
         csv_buffer = StringIO()
         gold_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
@@ -123,6 +124,13 @@ def run_gold_ingredient_frequency():
     except Exception as e:
         logger.error(f"오류 발생: {e}")
         raise
+
+
+def run_gold_ingredient_frequency():
+    run_id = build_batch_id()
+    with job_unit(logger, job="gold_ingredient_frequency", run_id=run_id):
+        _run_gold_ingredient_frequency(run_id=run_id)
+
 
 if __name__ == "__main__":
     run_gold_ingredient_frequency()
