@@ -47,6 +47,8 @@ src/
 reference_pipeline/         사전 JSON → Iceberg 동기화
 silver_pipeline/            Silver 테이블 스키마·생성·write
 gold_pipeline/              Gold 테이블·CDC·Neo4j CSV write
+models/                     배치 메타(run_id·batch_date) 재노출 (oliveyoung_common.batch)
+maintenance/                Iceberg 스냅샷 만료 등 유지보수
 neo4j_incremental.py        change_log → Neo4j 증분 반영
 scripts/entrypoint.sh       컨테이너 실행 모드 분기
 dags/                       Airflow DAG (DockerOperator)
@@ -108,6 +110,18 @@ oliveyoung_silver_to_neo4j_csv  (수동 — 그래프 초기 벌크 적재용)
 정상 운영에서 Neo4j 는 `neo4j_incremental` 로 변경분만 반영하고,
 CSV 익스포트는 그래프를 처음 채울 때만 쓴다
 
+## 배포 (CI/CD)
+
+`main` push 시 GitHub Actions 가 OIDC 로 AWS 를 assume 해 다음을 자동 처리한다(SSH·상시 키 불필요).
+
+| 워크플로 | 트리거 | 동작 |
+|----------|--------|------|
+| `build-and-push` | main push | ARM 러너에서 이미지 빌드 → ECR push (`ECRRole`) |
+| `deploy` | main push | SSM `send-command` 로 EC2 갱신 (`SSMRole`) |
+| `update-submodule` | `repository_dispatch` | `oliveyoung_common` 갱신 시 서브모듈 포인터를 최신으로 커밋 |
+
+`oliveyoung_common` 이 바뀌면 그쪽에서 dispatch 를 쏴 이 레포의 서브모듈 포인터가 자동으로 따라온다.
+
 ## 주요 테이블
 
 ### Silver (`oliveyoung_silver_current` / `_history`)
@@ -145,6 +159,7 @@ CSV 익스포트는 그래프를 처음 채울 때만 쓴다
 - 각 단계가 `log_dq`(Loki 로그) + `write_dq_metrics`(테이블)로 **같은 수치를 이중 기록**(테이블 적재는 비치명적).
 - `batch_date`(단계 관통 논리 배치 날짜)로 crawl·bronze_to_silver·silver_to_gold를 한 배치로 묶어, 대시보드 그래프의 한 시점을 클릭하면 그 배치의 silver 행으로 드릴다운한다. `run_id`는 초단위 유니크 실행 식별.
 - 테이블 실제 위치는 `GOLD_PATH`(`olive_young_gold/dq_metrics/`). 조회는 **dq_api**(pyiceberg+DuckDB)가 읽어 Grafana(Infinity)에 노출.
+- 단계가 끝나면 그 배치의 `dq_metrics` 요약을 **Discord 완료 리포트**로 보낸다(옵트인 — `DISCORD_DQ_WEBHOOK_URL` 있을 때만, 미설정이면 미전송). 만성적이지만 비치명적인 지표는 알람 대신 이 리포트로 노출.
 
 ## 설계 메모
 
@@ -153,7 +168,7 @@ CSV 익스포트는 그래프를 처음 채울 때만 쓴다
 - **Neo4j 증분 + checkpoint** — `neo4j_sync_checkpoint` 에 마지막 처리 배치를 남겨 change_log 의 신규분만 그래프에 반영한다.
 - **Aho-Corasick 매칭** — 수천 개 표준명을 한 번의 스캔으로 동시 탐색. 성분명 내부 쉼표는 마스킹으로 분리.
 - **사전 분리 관리** — 오타·불량키워드·커스텀 성분 사전을 Git 의 JSON 으로 두고 `sync_reference_data.py` 로 Iceberg 동기화. 코드 재배포 없이 수정.
-- **정합성 = 로그 + 테이블 이중 소스** — 각 단계가 `log_dq`(Loki)와 `write_dq_metrics`(Iceberg `dq_metrics`)로 같은 수치를 남긴다. 로그 기반 대시보드는 유지하고, 테이블 소스는 dq_api→Grafana로 별도 대시보드에 노출(장기 추세·드릴다운). 지표 추가는 key/value라 스키마 진화 불필요.
+- **정합성 = 로그 + 테이블 이중 소스** — 각 단계가 `log_dq`(Loki)와 `write_dq_metrics`(Iceberg `dq_metrics`)로 같은 수치를 남긴다. 로그 기반 대시보드는 유지하고, 테이블 소스는 dq_api→Grafana로 별도 대시보드에 노출(장기 추세·드릴다운). 같은 수치를 단계 종료 시 Discord 완료 리포트로도 요약 발송한다. 지표 추가는 key/value라 스키마 진화 불필요.
 
 ## 인프라
 
